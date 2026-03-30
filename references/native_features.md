@@ -1,159 +1,277 @@
 # Supra Native Features Guide
 
-Supra has built-in features that most blockchains don't have natively. These are directly integrated into the chain.
+Supra has built-in features that most blockchains don't have natively.
 
 ---
 
 ## 1. dVRF — On-Chain Verifiable Randomness
 
-Supra provides **native randomness** — no external services needed.
+Supra dVRF uses a **request/callback** pattern — NOT a synchronous call.
+You request randomness, and Supra calls back your contract with the result.
 
-### Add to Move.toml
+> ⚠️ **Important:** dVRF requires whitelisting. Submit a request:
+> https://forms.gle/WFvpBXg67GmDrokv5
+> Minimum deposit: 10 SUPRA on testnet.
+
+### Move.toml Dependency
+
 ```toml
+# Testnet
 [dependencies.SupraVrf]
 git = "https://github.com/Entropy-Foundation/vrf-interface"
+subdir = "supra/testnet"
+rev = "master"
+
+# Mainnet
+[dependencies.SupraVrf]
+git = "https://github.com/Entropy-Foundation/vrf-interface"
+subdir = "supra/mainnet"
+rev = "master"
 ```
 
-### Use in Move Contract
+### Full dVRF Example
+
 ```move
 module my_module::lottery {
+    use aptos_std::table;
+    use supra_addr::supra_vrf;
+    use std::string;
     use supra_framework::event;
-    use supra_vrf::vrf;
+    use supra_framework::signer;
 
-    struct LotteryResult has key {
-        winner: address,
-        random_number: u64,
+    struct RandomNumberList has key {
+        random_numbers: table::Table<u64, vector<u256>>,
     }
 
     #[event]
-    struct WinnerPicked has drop, store {
-        winner: address,
-        number: u64,
+    struct RandomnessRequested has drop, store { nonce: u64, requester: address }
+
+    #[event]
+    struct RandomnessReceived has drop, store { nonce: u64, count: u64 }
+
+    fun init_module(sender: &signer) {
+        move_to(sender, RandomNumberList { random_numbers: table::new() });
     }
 
-    public entry fun pick_winner(
-        admin: &signer,
-        participants: vector<address>
-    ) {
-        // Get verifiable random number
-        let random = vrf::random_u64();
-        let len = vector::length(&participants);
-        let winner_index = random % len;
-        let winner = *vector::borrow(&participants, winner_index);
+    // Step 1: Request randomness — Supra will call `distribute` as callback
+    public entry fun rng_request(
+        sender: &signer,
+        rng_count: u8,         // how many random numbers (max 255)
+        client_seed: u64,      // extra entropy, 0 is fine
+        num_confirmations: u64 // block confirmations before callback fires
+    ) acquires RandomNumberList {
+        let callback_address  = @my_module;
+        let callback_module   = string::utf8(b"lottery");
+        let callback_function = string::utf8(b"distribute");
 
-        move_to(admin, LotteryResult {
-            winner,
-            random_number: random,
-        });
+        let nonce = supra_vrf::rng_request(
+            sender, callback_address, callback_module,
+            callback_function, rng_count, client_seed, num_confirmations,
+        );
 
-        event::emit(WinnerPicked { winner, number: random });
+        let list = borrow_global_mut<RandomNumberList>(@my_module);
+        table::add(&mut list.random_numbers, nonce, vector[]);
+
+        event::emit(RandomnessRequested { nonce, requester: signer::address_of(sender) });
+    }
+
+    // Step 2: Callback — Supra calls this automatically with the random result
+    // Must be a public entry function with exactly these 6 parameters
+    public entry fun distribute(
+        nonce: u64,
+        message: vector<u8>,
+        signature: vector<u8>,
+        caller_address: address,
+        rng_count: u8,
+        client_seed: u64,
+    ) acquires RandomNumberList {
+        // Verify callback is genuine and extract verified random numbers
+        let verified_nums: vector<u256> = supra_vrf::verify_callback(
+            nonce, message, signature, caller_address, rng_count, client_seed,
+        );
+
+        let list = borrow_global_mut<RandomNumberList>(@my_module);
+        let slot = table::borrow_mut(&mut list.random_numbers, nonce);
+        *slot = verified_nums;
+
+        event::emit(RandomnessReceived { nonce, count: (rng_count as u64) });
+    }
+
+    #[view]
+    public fun get_random_numbers(nonce: u64): vector<u256> acquires RandomNumberList {
+        let list = borrow_global<RandomNumberList>(@my_module);
+        *table::borrow(&list.random_numbers, nonce)
     }
 }
 ```
 
-### Docs
-- Full guide: https://docs.supra.com/oracles/dvrf/v2-guide
+### CLI
+
+```bash
+# Request 1 random number
+supra move tool run \
+  --function-id 'my_module::lottery::rng_request' \
+  --args u8:1 u64:0 u64:1 \
+  --rpc-url https://rpc-testnet.supra.com
+
+# View result by nonce
+supra move tool view \
+  --function-id 'my_module::lottery::get_random_numbers' \
+  --args u64:0 \
+  --rpc-url https://rpc-testnet.supra.com
+
+# Whitelist your contract
+supra move tool run \
+  --function-id 'deposit::add_contract_to_whitelist' \
+  --args address:<YOUR_CONTRACT_ADDRESS> \
+  --rpc-url https://rpc-testnet.supra.com
+
+# Deposit funds
+supra move tool run \
+  --function-id 'deposit::deposit_fund' \
+  --args u64:1000000000 \
+  --rpc-url https://rpc-testnet.supra.com
+```
+
+**Docs:** https://docs.supra.com/dvrf/build-supra-l1/v2-guide
 
 ---
 
 ## 2. Native Oracles — Real-Time Price Feeds
 
-Access real-time, multi-source price data directly in your contracts. No external calls needed.
+Each price pair has a numeric **pair index** (e.g. BTC_USDT = 0, ETH_USDT = 1).
+Confirm exact indices at: https://docs.supra.com/oracles/data-feeds/push-oracle
 
-### Use in Move Contract
+### Price-Gated Transfer Example
+
 ```move
-module my_module::price_checker {
+module my_module::price_gated {
+    use supra_framework::supra_coin::SupraCoin;
+    use supra_framework::coin;
+    use supra_framework::signer;
     use supra_framework::event;
-    // Oracle access via supra push oracle
-    
+    // Confirm exact oracle module path at oracle docs
+    use supra_oracle::oracle;
+
+    const E_PRICE_TOO_LOW: u64 = 1;
+
     #[event]
-    struct PriceFetched has drop, store {
-        pair: vector<u8>,
-        price: u128,
+    struct TransferExecuted has drop, store {
+        from: address, to: address, amount: u64, btc_price: u128,
     }
 
-    public entry fun check_price(caller: &signer) {
-        // Price feeds available for BTC/USDT, ETH/USDT, SUPRA/USDT, etc.
-        // See docs for full list of available pairs
-        event::emit(PriceFetched {
-            pair: b"BTC_USDT",
-            price: 0, // fetched from oracle
+    /// Only allow transfer if BTC/USDT price is above threshold
+    public entry fun price_gated_transfer(
+        sender: &signer,
+        recipient: address,
+        amount: u64,
+        min_btc_price: u128,
+    ) {
+        // Fetch BTC/USDT — pair index 0 (verify at oracle docs)
+        // Returns (price, decimal, timestamp)
+        let (price, _decimal, _timestamp) = oracle::get_price(0);
+
+        assert!(price >= min_btc_price, E_PRICE_TOO_LOW);
+
+        coin::transfer<SupraCoin>(sender, recipient, amount);
+
+        event::emit(TransferExecuted {
+            from: signer::address_of(sender),
+            to: recipient,
+            amount,
+            btc_price: price,
         });
+    }
+
+    #[view]
+    public fun get_btc_price(): u128 {
+        let (price, _decimal, _timestamp) = oracle::get_price(0);
+        price
     }
 }
 ```
 
-### Available Price Pairs
-Common pairs available: BTC/USDT, ETH/USDT, SUPRA/USDT, and many more.
-
-### Docs
-- Data Feeds: https://docs.supra.com/oracles/data-feeds/push-oracle
+**Docs:** https://docs.supra.com/oracles/data-feeds/push-oracle
 
 ---
 
 ## 3. Native Automation — Schedule Contract Execution
 
-Supra lets you **schedule smart contract calls** without external keepers or bots. Built directly into the execution layer.
+Supra Automation registers a Move entry function to run automatically each block.
+**The condition lives INSIDE your function** — not in an external script.
 
-### Use Cases
-- Automated liquidations in DeFi
-- Recurring payments
-- Portfolio rebalancing
-- Yield harvesting
-- Time-locked releases
+No bots, no keepers — validators execute it directly.
 
-### How it Works
+### Automation-Compatible Contract
+
 ```move
-module my_module::auto_task {
-    use supra_framework::automation;
+module my_module::auto_tasks {
+    use supra_framework::supra_coin::SupraCoin;
+    use supra_framework::coin;
+    use supra_framework::signer;
 
-    /// Register an automation task
-    public entry fun register_task(
-        admin: &signer,
-        interval_seconds: u64,
+    /// Auto top-up: refill wallet when balance drops below threshold.
+    /// Register this with Supra Automation via CLI.
+    /// Condition is checked inside the function — exits cleanly if not met.
+    public entry fun auto_top_up(
+        source: &signer,
+        user: address,
+        min_balance: u64,
+        top_up_amount: u64,
     ) {
-        // Schedule a function to run every `interval_seconds`
-        // No external keepers needed
-        automation::register(
-            admin,
-            interval_seconds,
-            // function to call
-        );
+        let current = coin::balance<SupraCoin>(user);
+        if (current < min_balance) {
+            coin::transfer<SupraCoin>(source, user, top_up_amount);
+        }
+        // If condition is false, exits cleanly — no abort
     }
 }
 ```
 
-### Docs
-- Automation guide: https://docs.supra.com/automation
+### Register Task via CLI
+
+```bash
+supra move tool run \
+  --function-id 'supra_automation::automation_registry::register_task' \
+  --args \
+    string:'my_module::auto_tasks::auto_top_up' \
+    address:<USER_ADDRESS> \
+    u64:<MIN_BALANCE> \
+    u64:<TOP_UP_AMOUNT> \
+    u64:<MAX_GAS_AMOUNT> \
+    u64:<GAS_PRICE_CAP> \
+    u64:<AUTOMATION_FEE_CAP> \
+    u64:<EXPIRY_TIME_UNIX> \
+  --rpc-url https://rpc-testnet.supra.com
+```
+
+### Key Parameters
+| Parameter | Description |
+|---|---|
+| `max_gas_amount` | Max gas the task can consume per execution |
+| `gas_price_cap` | Skip block if network gas exceeds this value |
+| `automation_fee_cap` | Max fee per epoch |
+| expiry time | Unix timestamp when the task stops |
+
+**Docs:** https://docs.supra.com/automation/smart-contract-integration
 
 ---
 
-## 4. SupraNova Bridge — Cross-Chain Transfers
+## 4. SupraNova Bridge
 
-Transfer assets and messages between Supra and other blockchains.
+Transfer assets across chains. Two technologies:
+- **HyperNova** — Trustless, uses source chain consensus
+- **Hyperloop** — Fast multi-sig for L2s and high-latency chains
 
-### Two Bridge Technologies
-
-**HyperNova** — Trustless bridge
-- Uses source chain's consensus for verification
-- Best for: chains where trustless bridging is feasible
-
-**Hyperloop** — Fast multi-sig bridge
-- Game-theoretically secure
-- Best for: L2 chains or chains where HyperNova has high latency
-
-### Docs
-- Bridge guide: https://docs.supra.com/supranova
+**Docs:** https://docs.supra.com/supranova
 
 ---
 
-## Summary Table
+## Summary
 
-| Feature | What it does | Replaces |
+| Feature | Pattern | Requires Setup? |
 |---|---|---|
-| dVRF | On-chain randomness | Chainlink VRF, external RNG |
-| Oracles | Real-time price feeds | Chainlink Data Feeds |
-| Automation | Scheduled execution | Gelato, Chainlink Automation, bots |
-| SupraNova Bridge | Cross-chain transfers | External bridges like Wormhole |
-
-All of these are **native** to Supra — no external dependencies required! ✅
+| dVRF | Request → Callback (async) | ✅ Wallet + contract whitelisting |
+| Oracles | Synchronous on-chain read | ✅ Verify pair indices in docs |
+| Automation | Entry function + CLI registration | ✅ Gas caps + expiry required |
+| Bridge | SupraNova protocol | ✅ See bridge docs |

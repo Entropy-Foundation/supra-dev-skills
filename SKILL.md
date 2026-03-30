@@ -8,6 +8,33 @@ Always use `supra_framework::` — NOT `aptos_framework::` — for all imports.
 
 ---
 
+## ⚠️ Important Notes
+
+### This Skill Covers MoveVM Only
+Supra also supports EVM (Solidity). This skill is Move-only.
+For EVM/Solidity on Supra: https://docs.supra.com/network/evm/
+
+### Move.toml rev = "dev" Warning
+The SupraFramework dependency uses `rev = "dev"` which tracks the live development branch.
+This means it can change at any time and may occasionally break builds.
+For production, pin to a specific commit hash:
+```toml
+[dependencies.SupraFramework]
+git = "https://github.com/Entropy-Foundation/aptos-core.git"
+rev = "SPECIFIC_COMMIT_HASH_HERE"  # pin for stability
+subdir = "aptos-move/framework/supra-framework"
+```
+
+---
+
+## Skill Version
+- Version: 1.0.0
+- Last Reviewed: March 2026
+- Tested Against: Supra CLI (May 2025 release)
+- Framework: supra_framework (rev = "dev")
+
+---
+
 ## Environment Setup
 
 ### Prerequisites
@@ -38,7 +65,13 @@ supra move tool init --package-dir /supra/move_workspace/myProject --name myProj
 # Compile the package
 supra move tool compile --package-dir /supra/move_workspace/myProject
 
-# Fund account from testnet faucet
+# Create an account/profile first
+supra key generate --key-type ed25519 --profile myAccount
+
+# Activate the profile
+supra key activate-profile myAccount
+
+# Fund the active profile from testnet faucet
 supra move account fund-with-faucet --rpc-url https://rpc-testnet.supra.com
 
 # Publish/deploy to testnet
@@ -258,6 +291,26 @@ Docs: https://docs.supra.com/automation
 ### 4. SupraNova Bridge
 Cross-chain asset transfers.
 Docs: https://docs.supra.com/supranova
+
+---
+
+## SupraCoin Transfer (Move)
+
+```move
+use supra_framework::supra_coin::SupraCoin;
+use supra_framework::coin;
+
+// Transfer SupraCoin between accounts
+public entry fun send_supra(sender: &signer, recipient: address, amount: u64) {
+    coin::transfer<SupraCoin>(sender, recipient, amount);
+}
+
+// Check balance
+#[view]
+public fun get_supra_balance(addr: address): u64 {
+    coin::balance<SupraCoin>(addr)
+}
+```
 
 ---
 

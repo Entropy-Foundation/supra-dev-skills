@@ -112,6 +112,30 @@ module my_module::advanced {
         });
     }
 
+    public entry fun transfer_nft(
+        admin: &signer,
+        nft_id: u64,
+        new_owner: address,
+    ) acquires NFTCollection {
+        let admin_addr = signer::address_of(admin);
+        assert!(exists<NFTCollection>(admin_addr), E_NOT_INITIALIZED);
+
+        let collection = borrow_global_mut<NFTCollection>(admin_addr);
+        let len = vector::length(&collection.items);
+        let i = 0u64;
+        while (i < len) {
+            let item = vector::borrow_mut(&mut collection.items, i);
+            if (item.id == nft_id) {
+                let old_owner = item.owner;
+                item.owner = new_owner;
+                event::emit(NFTTransferred { id: nft_id, from: old_owner, to: new_owner });
+                return
+            };
+            i = i + 1;
+        };
+        assert!(false, E_NOT_FOUND);
+    }
+
     public entry fun mint_nft(
         admin: &signer,
         recipient: address,

@@ -116,7 +116,48 @@ npx ts-node src/quickstart.ts
 pip install supra-sdk
 ```
 
-### Docs
+### Basic Usage
+
+```python
+from supra_sdk import SupraClient, SupraAccount
+
+# Connect to testnet
+client = SupraClient("https://rpc-testnet.supra.com")
+
+# Load account from private key
+account = SupraAccount.from_private_key("YOUR_PRIVATE_KEY_HEX")
+print("Address:", account.address())
+
+# Fund from faucet (testnet only)
+client.fund_account_with_faucet(account.address())
+
+# Get account balance
+balance = client.get_account_balance(account.address())
+print("Balance:", balance)
+
+# Transfer SupraCoin
+tx = client.transfer_supra_coin(
+    sender=account,
+    recipient="RECIPIENT_ADDRESS",
+    amount=1000,
+)
+print("TX hash:", tx["hash"])
+```
+
+### Call a Contract Entry Function
+
+```python
+tx = client.invoke_contract_function(
+    account=account,
+    contract_address="CONTRACT_ADDRESS",
+    module_name="module_name",
+    function_name="function_name",
+    type_args=[],
+    args=[],
+)
+```
+
+### Full Docs
 https://docs.supra.com/network/move/python-sdk
 
 ---
