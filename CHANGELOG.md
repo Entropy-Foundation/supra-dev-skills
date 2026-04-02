@@ -4,6 +4,35 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [2.0.0] — April 2026
+
+### Bug Fixes
+- Fixed `std::supra::address_of` typo → `std::signer::address_of` in `test_examples.move` (line 76)
+- Fixed `E_PAUSED` misuse in `execute_timelock` → correct dedicated `E_TIMELOCK_NOT_READY` constant
+- Wired `assert_not_paused` into `mint_nft` and `transfer_nft` (was defined but never called)
+- Replaced O(n) NFT vector pattern with `Table<u64, NFTItem>` (O(1) lookup) in `advanced_examples.move`
+
+### Added
+- `references/resource_accounts.md` — SignerCapability, resource account vault pattern, DAO, init_module auto-setup
+- `references/patterns.md` — SmartTable usage, upgrade/migration (3 strategies), multi-signer transactions, gas model
+- BCS argument serialization examples in `references/sdk_guide.md` (address, u8, u64, u128, bool, vector<u8>)
+- Python SDK contract call example with argument encoding
+- SmartTable inline examples in SKILL.md (with Table vs vector comparison table)
+- Gas/fee model section: Quants, gas units, simulation, common pitfalls
+- Multi-signer (multi-agent) transaction pattern with TypeScript SDK example
+- Upgrade/migration guidance: compatible publish, new module + migration, resource account proxy
+- `init_module` auto-setup pattern documented
+- Version pinning guidance for TypeScript SDK (`npm install supra-l1-sdk@x.y.z`)
+
+### Improved
+- SKILL.md fully restructured into named sections (SETUP, MOVE LANGUAGE, DATA STRUCTURES, SUPRA SPECIFICS, COMMON PATTERNS, NATIVE FEATURES, SDK, TESTING, UPGRADE, NETWORK)
+- Move.toml `rev = "dev"` warning elevated to the very top of SKILL.md as a visible callout
+- README.md directory listing synced with actual repo contents (was missing advanced_examples.move, test_examples.move, version_check.sh)
+- `token_contract.move` and `events_example.move` now explicitly referenced in SKILL.md with descriptions
+- All reference files listed in SKILL.md table with one-line descriptions
+
+---
+
 ## [1.1.0] — March 2026
 
 ### Fixed

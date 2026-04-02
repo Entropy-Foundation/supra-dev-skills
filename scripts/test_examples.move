@@ -73,7 +73,7 @@ module my_module::counter_tests {
         assert!(counter::get_value(std::signer::address_of(&admin)) == 100, 0);
 
         counter::reset(&admin);
-        assert!(counter::get_value(std::supra::address_of(&admin)) == 0, 1);
+        assert!(counter::get_value(std::signer::address_of(&admin)) == 0, 1);
     }
 
     // ============================================================

@@ -2,9 +2,11 @@
 
 ## TypeScript SDK
 
-### Install
+### Install (pin to a tested version)
 ```bash
-npm install supra-l1-sdk
+npm install supra-l1-sdk@latest
+# Pin to a specific version for production stability:
+npm install supra-l1-sdk@2.0.0
 ```
 
 ### Import
@@ -14,22 +16,16 @@ import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supr
 
 ### Initialize Client
 ```typescript
-// Connect to testnet
 const client = await SupraClient.init("https://rpc-testnet.supra.com/");
-
-// Connect to mainnet
 const client = await SupraClient.init("https://rpc-mainnet.supra.com/");
 ```
 
 ### Create / Load Account
 ```typescript
-// Load from private key
 const account = new SupraAccount(
   Uint8Array.from(Buffer.from("YOUR_PRIVATE_KEY_HEX", "hex"))
 );
-
-// Get account address
-const address = account.address();
+const address = account.address(); // HexString
 ```
 
 ### Fund from Faucet (Testnet Only)
@@ -42,7 +38,7 @@ await client.fundAccountWithFaucet(account.address());
 const txRes = await client.transferSupraCoin(
   senderAccount,
   new HexString("RECEIVER_ADDRESS_HEX"),
-  BigInt(1000000), // amount in smallest unit
+  BigInt(1000000), // amount in Quants (1 SUPRA = 100_000_000 Quants)
   {
     enableTransactionWaitAndSimulationArgs: {
       enableWaitForTransaction: true,
@@ -50,59 +46,147 @@ const txRes = await client.transferSupraCoin(
     },
   }
 );
-console.log("TX Result:", txRes);
 ```
 
-### Call a Contract Entry Function
+---
+
+## Calling Contract Functions with BCS Arguments
+
+This is the #1 place developers get stuck. Move entry functions take typed arguments. You must serialize them correctly using BCS before passing them to `invokeContractFunction`.
+
+### BCS Serialization Reference
+
 ```typescript
-const txRes = await client.invokeContractFunction(
-  account,
-  "CONTRACT_ADDRESS",
-  "module_name",
-  "function_name",
-  [], // type arguments
-  [/* function arguments */],
-  {
-    enableTransactionWaitAndSimulationArgs: {
-      enableWaitForTransaction: true,
-    },
-  }
-);
+import { BCS } from "supra-l1-sdk";
+
+// u8
+BCS.bcsSerializeU8(42)
+
+// u64 — use BigInt for all u64 values
+BCS.bcsSerializeUint64(BigInt(1000000))
+
+// u128
+BCS.bcsSerializeU128(BigInt("99999999999999"))
+
+// bool
+BCS.bcsSerializeBool(true)
+
+// address (32 bytes) — from a hex string
+BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xcafe"))
+
+// vector<u8> (byte array / raw bytes)
+BCS.bcsSerializeBytes(Buffer.from("hello world"))
+
+// string (vector<u8> under the hood)
+const encoder = new TextEncoder();
+BCS.bcsSerializeBytes(encoder.encode("my_string"))
 ```
 
-### Full Quickstart Example
+### Full Example: Calling a Contract with Real Arguments
+
 ```typescript
-import { HexString, SupraAccount, SupraClient } from "supra-l1-sdk";
+import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
 
 (async () => {
   const client = await SupraClient.init("https://rpc-testnet.supra.com/");
+  const account = new SupraAccount(
+    Uint8Array.from(Buffer.from("YOUR_PRIVATE_KEY_HEX", "hex"))
+  );
 
+  // Calling: public entry fun register_member(
+  //   admin: &signer,
+  //   new_member: address,
+  //   name: vector<u8>,
+  //   score: u64,
+  // )
+  const txRes = await client.invokeContractFunction(
+    account,
+    "0xYOUR_CONTRACT_ADDRESS",    // contract address (without 0x or with)
+    "registry",                    // module name
+    "register_member",             // function name
+    [],                            // type arguments (empty if no generics)
+    [
+      // new_member: address
+      BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xbeef")),
+      // name: vector<u8>
+      BCS.bcsSerializeBytes(Buffer.from("Alice")),
+      // score: u64
+      BCS.bcsSerializeUint64(BigInt(9999)),
+    ],
+    {
+      enableTransactionWaitAndSimulationArgs: {
+        enableWaitForTransaction: true,
+      },
+    }
+  );
+
+  console.log("TX hash:", txRes.txHash);
+  console.log("Success:", txRes.success);
+})();
+```
+
+### Example: Calling with a Generic Type Argument (e.g. coin transfer)
+
+```typescript
+// public entry fun transfer<CoinType>(sender: &signer, recipient: address, amount: u64)
+const txRes = await client.invokeContractFunction(
+  account,
+  "0x1",          // supra_framework address
+  "coin",
+  "transfer",
+  ["0x1::supra_coin::SupraCoin"],   // type argument — the coin type
+  [
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(recipientAddress)),
+    BCS.bcsSerializeUint64(BigInt(1000000)),
+  ],
+  { enableTransactionWaitAndSimulationArgs: { enableWaitForTransaction: true } }
+);
+```
+
+### Read a View Function
+
+```typescript
+// public fun get_score(registry_addr: address, player: address): u64
+const result = await client.invokeView(
+  new HexString("0xYOUR_CONTRACT_ADDRESS"),
+  "leaderboard",
+  "get_score",
+  [],   // type args
+  [
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("REGISTRY_ADDR")),
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR")),
+  ]
+);
+console.log("Score:", result);
+```
+
+---
+
+## Full Quickstart Example
+
+```typescript
+import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+
+(async () => {
+  const client = await SupraClient.init("https://rpc-testnet.supra.com/");
   const account = new SupraAccount(
     Uint8Array.from(Buffer.from("YOUR_PRIVATE_KEY_HEX", "hex"))
   );
 
   await client.fundAccountWithFaucet(account.address());
-  console.log("Account funded:", account.address().hex());
+  console.log("Funded:", account.address().hex());
 
-  const receiver = new HexString("RECEIVER_ADDRESS");
-
+  // Simple coin transfer
   const txRes = await client.transferSupraCoin(
     account,
-    receiver,
+    new HexString("RECEIVER_ADDRESS"),
     BigInt(1000),
-    {
-      enableTransactionWaitAndSimulationArgs: {
-        enableWaitForTransaction: true,
-        enableTransactionSimulation: true,
-      },
-    }
+    { enableTransactionWaitAndSimulationArgs: { enableWaitForTransaction: true } }
   );
-
   console.log("Transfer TX:", txRes);
 })();
 ```
 
-### Run the Script
 ```bash
 npx ts-node src/quickstart.ts
 ```
@@ -121,21 +205,15 @@ pip install supra-sdk
 ```python
 from supra_sdk import SupraClient, SupraAccount
 
-# Connect to testnet
 client = SupraClient("https://rpc-testnet.supra.com")
-
-# Load account from private key
 account = SupraAccount.from_private_key("YOUR_PRIVATE_KEY_HEX")
 print("Address:", account.address())
 
-# Fund from faucet (testnet only)
 client.fund_account_with_faucet(account.address())
 
-# Get account balance
 balance = client.get_account_balance(account.address())
 print("Balance:", balance)
 
-# Transfer SupraCoin
 tx = client.transfer_supra_coin(
     sender=account,
     recipient="RECIPIENT_ADDRESS",
@@ -144,21 +222,52 @@ tx = client.transfer_supra_coin(
 print("TX hash:", tx["hash"])
 ```
 
-### Call a Contract Entry Function
+### Call a Contract Entry Function (Python)
 
 ```python
+from supra_sdk import SupraClient, SupraAccount, bcs
+
+client = SupraClient("https://rpc-testnet.supra.com")
+account = SupraAccount.from_private_key("YOUR_PRIVATE_KEY_HEX")
+
+# Calling: public entry fun register_member(
+#   admin: &signer,
+#   new_member: address,
+#   name: vector<u8>,
+#   score: u64,
+# )
 tx = client.invoke_contract_function(
     account=account,
     contract_address="CONTRACT_ADDRESS",
-    module_name="module_name",
-    function_name="function_name",
+    module_name="registry",
+    function_name="register_member",
     type_args=[],
-    args=[],
+    args=[
+        bcs.encode_address("0xbeef"),         # address
+        bcs.encode_bytes(b"Alice"),            # vector<u8>
+        bcs.encode_u64(9999),                 # u64
+    ],
 )
+print("TX hash:", tx["hash"])
 ```
 
-### Full Docs
-https://docs.supra.com/network/move/python-sdk
+### Read a View Function (Python)
+
+```python
+result = client.invoke_view(
+    contract_address="CONTRACT_ADDRESS",
+    module_name="leaderboard",
+    function_name="get_score",
+    type_args=[],
+    args=[
+        bcs.encode_address("REGISTRY_ADDR"),
+        bcs.encode_address("PLAYER_ADDR"),
+    ],
+)
+print("Score:", result)
+```
+
+Full Python SDK docs: https://docs.supra.com/network/move/python-sdk
 
 ---
 
@@ -166,14 +275,13 @@ https://docs.supra.com/network/move/python-sdk
 
 Base URL (Testnet): `https://rpc-testnet.supra.com`
 
-### Common Endpoints
-
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/rpc/v1/accounts/{address}` | Get account info |
 | GET | `/rpc/v1/accounts/{address}/resources` | Get account resources |
 | POST | `/rpc/v1/transactions` | Submit a transaction |
 | GET | `/rpc/v1/transactions/{hash}` | Get transaction by hash |
+| GET | `/rpc/v1/accounts/{address}/resources/{resource_type}` | Get specific resource |
 
 Full REST API docs: https://docs.supra.com/network/move/rest-api
 
