@@ -56,7 +56,7 @@ echo "=========================================="
 # ── Step 1: Compile ────────────────────────────────────────
 echo ""
 echo "Step 1: Compiling package..."
-supra move tool compile --package-dir $PACKAGE_DIR
+supra move tool compile --package-dir "$PACKAGE_DIR"
 
 if [ $? -ne 0 ]; then
   echo "Compilation failed. Fix errors and retry."
@@ -79,7 +79,7 @@ fi
 echo ""
 echo "Step 3: Publishing package to $NETWORK..."
 supra move tool publish \
-  --package-dir $PACKAGE_DIR \
+  --package-dir "$PACKAGE_DIR" \
   --profile $PROFILE \
   --rpc-url $RPC_URL
 

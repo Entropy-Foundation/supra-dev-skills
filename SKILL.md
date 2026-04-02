@@ -63,7 +63,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.1.0
+- Version: 2.2.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
 - Framework: supra_framework (pin rev for production — see warning above)

@@ -380,22 +380,29 @@ module my_module::lifecycle {
         table::destroy_empty(metadata); // aborts if metadata still has entries
     }
 
-    // Draining a Table before destroying it
+    // Draining a Table before destroying it — full lifecycle
     public entry fun drain_and_close(admin: &signer, keys: vector<u64>) acquires Registry {
         let addr = signer::address_of(admin);
-        let reg = borrow_global_mut<Registry>(addr);
 
-        // Remove all known keys from Table first
-        let i = 0u64;
-        while (i < std::vector::length(&keys)) {
-            let k = *std::vector::borrow(&keys, i);
-            if (table::contains(&reg.metadata, k)) {
-                table::remove(&mut reg.metadata, k);
+        // Step 1: borrow mutably and drain the Table
+        {
+            let reg = borrow_global_mut<Registry>(addr);
+            let i = 0u64;
+            while (i < std::vector::length(&keys)) {
+                let k = *std::vector::borrow(&keys, i);
+                if (table::contains(&reg.metadata, k)) {
+                    table::remove(&mut reg.metadata, k);
+                };
+                i = i + 1;
             };
-            i = i + 1;
-        };
-        // Now safe to destroy_empty (if all keys were removed)
-        // Then move_from and drop SmartTable
+        }; // borrow ends here
+
+        // Step 2: move_from to take ownership of the whole struct
+        let Registry { scores, metadata } = move_from<Registry>(addr);
+
+        // Step 3: destroy inner collections explicitly
+        smart_table::drop(scores);         // drops all entries at once
+        table::destroy_empty(metadata);    // aborts if any keys remain — drain must be complete
     }
 }
 ```

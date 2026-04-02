@@ -89,7 +89,7 @@ use supra_framework::supra_governance;
 | Native Coin | `aptos_coin::AptosCoin` | `supra_coin::SupraCoin` |
 | Coin Operations | `aptos_framework::coin` | `supra_framework::coin` |
 | Event Handling | `aptos_framework::event` | `supra_framework::event` |
-| Fungible Assets | `aptos_framework::fungible_asset` | `supra_framework::fungible_asset` |
+| Fungible Assets | `aptos_framework::fungible_asset` | `supra_framework::fungible_asset` ⚠️ Mainnet: FA migration disabled — use `coin_wrapper` |
 | Multisig | `aptos_framework::multisig_account` | `supra_framework::multisig_account` |
 | Governance | `aptos_framework::governance` | `supra_framework::supra_governance` ⚠️ |
 | Staking/Consensus | `aptos_framework::staking_config` | `supra_framework::staking_config` |

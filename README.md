@@ -105,6 +105,6 @@ supra move tool init --package-dir /supra/move_workspace/myProject --name myProj
 
 ## Skill Version
 
-- Version: 2.1.0
+- Version: 2.2.0
 - Compatible with: Supra latest stable release
 - Language: Move (MoveVM)
