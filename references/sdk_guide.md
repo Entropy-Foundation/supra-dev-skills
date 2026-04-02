@@ -106,10 +106,13 @@ console.log("TX hash:", response.txHash);
 
 ### With Generic Type Arguments
 
+> **Framework address:** `supra_framework` is deployed at address `0x1` on Supra (same as Aptos). So `0x1::supra_coin::SupraCoin` is the canonical TypeTag path for SupraCoin. Use this literal address — do not use a named address variable here.
+
 ```typescript
 // public entry fun transfer<CoinType>(sender, recipient: address, amount: u64)
 import { TypeTagParser } from "supra-l1-sdk";
 
+// 0x1 = supra_framework address; supra_coin is the module; SupraCoin is the type
 const coinTypeTag = new TypeTagParser("0x1::supra_coin::SupraCoin").parseTypeTag();
 
 const serializedRawTx = await client.createSerializedRawTxObject(

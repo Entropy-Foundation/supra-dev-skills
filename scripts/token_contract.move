@@ -48,7 +48,8 @@ module my_module::my_token {
         });
     }
 
-    /// Mint tokens to a recipient
+    /// Mint tokens to a recipient.
+    /// ⚠️ recipient must have called register() first — coin::deposit aborts otherwise.
     public entry fun mint(
         admin: &signer,
         recipient: address,
@@ -58,6 +59,17 @@ module my_module::my_token {
         let caps = borrow_global<TokenCapabilities>(admin_addr);
         let coins = coin::mint<MyToken>(amount, &caps.mint_cap);
         coin::deposit<MyToken>(recipient, coins);
+    }
+
+    /// Burn tokens from an account.
+    /// The admin holds the burn capability; the from account's coins are destroyed.
+    public entry fun burn(
+        admin: &signer,
+        from: address,
+        amount: u64,
+    ) acquires TokenCapabilities {
+        let caps = borrow_global<TokenCapabilities>(signer::address_of(admin));
+        coin::burn_from<MyToken>(from, amount, &caps.burn_cap);
     }
 
     /// Transfer tokens between accounts

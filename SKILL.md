@@ -63,8 +63,8 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.0.0
-- Last Reviewed: April 2026
+- Version: 2.1.0
+- Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
 - Framework: supra_framework (rev = "dev")
 
@@ -79,15 +79,19 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 ### Install Supra CLI
 ```bash
 # Pull and start the container
+# ⚠️ Verify this URL is the current canonical install source before running:
+# https://docs.supra.com — the compose.yaml may move to Entropy-Foundation org
 cd Documents
 curl https://raw.githubusercontent.com/supra-labs/supra-dev-hub/refs/heads/main/Scripts/cli/compose.yaml | docker compose -f - up -d
 
-# Enter the container shell
+# Enter the container shell — ALL supra CLI commands must run from here
 docker exec -it supra_cli /bin/bash
 
 # Verify
 supra --help
 ```
+
+> ⚠️ **Important:** All `supra` CLI commands (compile, publish, run, etc.) only work **inside the Docker container**. Scripts like `deploy.sh` must be run from within the container shell, not from your host terminal.
 
 ---
 
@@ -601,12 +605,20 @@ CLI:
 supra move tool run \
   --function-id 'my_module::lottery::rng_request' \
   --args u8:1 u64:0 u64:1 \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
 Docs: https://docs.supra.com/dvrf/build-supra-l1/v2-guide
 
 ### Oracles — Real-Time Price Feeds
+
+> **Move.toml note:** The oracle module is deployed on-chain by Supra — it is NOT a git dependency. You must add the oracle contract address to your `[addresses]` section and confirm the module name from the docs. Example:
+> ```toml
+> [addresses]
+> my_module    = "YOUR-ADDRESS"
+> supra_oracle = "ORACLE_CONTRACT_ADDRESS"  # get from: https://docs.supra.com/oracles/data-feeds/push-oracle
+> ```
 
 ```move
 module my_module::price_reader {

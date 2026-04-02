@@ -252,8 +252,9 @@ import { SupraClient, SupraAccount, HexString, TxnBuilderTypes } from "supra-l1-
 
 const client = await SupraClient.init("https://rpc-testnet.supra.com/");
 
-const seller = new SupraAccount(Buffer.from("SELLER_PRIVATE_KEY_HEX", "hex"));
-const buyer  = new SupraAccount(Buffer.from("BUYER_PRIVATE_KEY_HEX",  "hex"));
+// Canonical constructor: Uint8Array.from(Buffer.from(..., "hex"))
+const seller = new SupraAccount(Uint8Array.from(Buffer.from("SELLER_PRIVATE_KEY_HEX", "hex")));
+const buyer  = new SupraAccount(Uint8Array.from(Buffer.from("BUYER_PRIVATE_KEY_HEX",  "hex")));
 
 // Build a multi-agent (multi-signer) transaction
 // seller is the primary signer, buyer is the secondary signer
@@ -328,14 +329,79 @@ console.log("TX hash:", txRes.txHash);
 ### Simulate Before Submitting
 
 ```typescript
-// Simulate to estimate gas before sending
-const simulation = await client.simulateTransaction(
-  account,
-  new HexString("CONTRACT_ADDRESS"),
+// Correct pattern: createRawTxObject first, then simulateTx
+// (simulateTransaction with this signature does NOT exist in supra-l1-sdk)
+const accountInfo = await client.getAccountInfo(account.address());
+const rawTxn = await client.createRawTxObject(
+  account.address(),
+  BigInt(accountInfo.sequence_number),
+  "CONTRACT_ADDRESS",
   "module_name",
   "function_name",
-  [],
-  [/* args */]
+  [],          // TypeTag[]
+  [/* BCS-encoded args */]
 );
+const simulation = await client.simulateTx(account, rawTxn);
 console.log("Estimated gas:", simulation.gas_used);
 ```
+
+---
+
+## 5. Table / SmartTable Destruction Lifecycle
+
+A struct containing a `Table` or `SmartTable` cannot be dropped — the compiler will reject it with "resource not droppable." You **must** explicitly destroy the collection before or during the struct removal.
+
+This is one of the most common compile errors for new Move developers.
+
+```move
+module my_module::lifecycle {
+    use aptos_std::smart_table::{Self, SmartTable};
+    use aptos_std::table::{Self, Table};
+    use supra_framework::signer;
+
+    struct Registry has key {
+        scores: SmartTable<address, u64>,
+        metadata: Table<u64, address>,
+    }
+
+    // ✅ CORRECT — destroy inner collections before dropping the struct
+    public entry fun shutdown(admin: &signer) acquires Registry {
+        let Registry { scores, metadata } = move_from<Registry>(signer::address_of(admin));
+
+        // SmartTable: use drop() to destroy all entries at once
+        smart_table::drop(scores);
+
+        // Table: must be destroyed manually entry-by-entry if non-empty,
+        // OR use destroy_empty() only if you know it's already empty
+        table::destroy_empty(metadata); // aborts if metadata still has entries
+    }
+
+    // Draining a Table before destroying it
+    public entry fun drain_and_close(admin: &signer, keys: vector<u64>) acquires Registry {
+        let addr = signer::address_of(admin);
+        let reg = borrow_global_mut<Registry>(addr);
+
+        // Remove all known keys from Table first
+        let i = 0u64;
+        while (i < std::vector::length(&keys)) {
+            let k = *std::vector::borrow(&keys, i);
+            if (table::contains(&reg.metadata, k)) {
+                table::remove(&mut reg.metadata, k);
+            };
+            i = i + 1;
+        };
+        // Now safe to destroy_empty (if all keys were removed)
+        // Then move_from and drop SmartTable
+    }
+}
+```
+
+### Destruction Quick Reference
+
+| Type | Destroy with |
+|---|---|
+| `SmartTable<K, V>` | `smart_table::drop(t)` — destroys all entries |
+| `SmartTable<K, V>` (if empty) | `smart_table::destroy_empty(&mut t)` |
+| `Table<K, V>` | No bulk drop — remove all entries manually, then `table::destroy_empty(t)` |
+| `vector<T>` where T has `drop` | Drops automatically |
+| `vector<T>` where T has no `drop` | Must pop/unpack each element manually |

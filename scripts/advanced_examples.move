@@ -21,7 +21,8 @@ module my_module::advanced {
     const E_NOT_INITIALIZED: u64 = 3;
     const E_ALREADY_EXISTS: u64 = 4;
     const E_NOT_FOUND: u64 = 5;
-    const E_TIMELOCK_NOT_READY: u64 = 6;  // distinct from E_PAUSED
+    const E_TIMELOCK_NOT_READY: u64 = 6;
+    const E_ALREADY_EXECUTED: u64 = 7;  // distinct from E_ALREADY_EXISTS
 
     // ============================================================
     // Pattern 1: Admin + Pausable Contract
@@ -168,6 +169,10 @@ module my_module::advanced {
         assert!(table::contains(&collection.items, nft_id), E_NOT_FOUND);
 
         let item = table::borrow_mut(&mut collection.items, nft_id);
+        // Only the NFT's current owner may transfer it.
+        // In production: separate collection_addr from the signer so any user
+        // can hold and transfer NFTs from a shared collection.
+        assert!(item.owner == admin_addr, E_NOT_ADMIN);
         let old_owner = item.owner;
         item.owner = new_owner;
 
@@ -200,7 +205,7 @@ module my_module::advanced {
         let addr = signer::address_of(admin);
         let action = borrow_global_mut<TimelockAction>(addr);
 
-        assert!(!action.executed, E_ALREADY_EXISTS);
+        assert!(!action.executed, E_ALREADY_EXECUTED);
         // E_TIMELOCK_NOT_READY — semantically correct; E_PAUSED would be wrong here
         assert!(timestamp::now_seconds() >= action.unlock_time, E_TIMELOCK_NOT_READY);
 

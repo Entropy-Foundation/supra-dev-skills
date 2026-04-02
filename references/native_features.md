@@ -112,24 +112,32 @@ module my_module::lottery {
 supra move tool run \
   --function-id 'my_module::lottery::rng_request' \
   --args u8:1 u64:0 u64:1 \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
-# View result by nonce
+# View result by nonce (read-only, no --profile needed)
 supra move tool view \
   --function-id 'my_module::lottery::get_random_numbers' \
   --args u64:0 \
   --rpc-url https://rpc-testnet.supra.com
 
-# Whitelist your contract
+# ── Whitelist & Deposit ─────────────────────────────────────────────
+# ⚠️  'deposit::' is NOT a valid function-id prefix.
+# A full function-id requires: <deployed_address>::<module>::<function>
+# Get the deployed address of the VRF deposit contract from:
+# https://docs.supra.com/dvrf/build-supra-l1/v2-guide
+#
+# Example (replace DEPOSIT_CONTRACT_ADDRESS with the real address):
 supra move tool run \
-  --function-id 'deposit::add_contract_to_whitelist' \
+  --function-id '<DEPOSIT_CONTRACT_ADDRESS>::deposit::add_contract_to_whitelist' \
   --args address:<YOUR_CONTRACT_ADDRESS> \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
-# Deposit funds
 supra move tool run \
-  --function-id 'deposit::deposit_fund' \
+  --function-id '<DEPOSIT_CONTRACT_ADDRESS>::deposit::deposit_fund' \
   --args u64:1000000000 \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
 

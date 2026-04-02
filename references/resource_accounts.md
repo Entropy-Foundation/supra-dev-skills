@@ -113,12 +113,22 @@ let (resource_signer, resource_cap) = account::create_resource_account(admin, se
 
 ### Derive the address before deployment
 
+The resource account address is derived as `sha3_256(admin_address_bytes || seed_bytes || 0xFF)` where `admin_address` is the 32-byte canonical form (zero-padded). In TypeScript, use the SDK's `AccountAddress` utility rather than computing this manually:
+
 ```typescript
-// TypeScript — pre-compute resource account address
-import { SupraClient, HexString } from "supra-l1-sdk";
-// The address is sha3_256(admin_address || seed || 0xFF)
-// Use the SDK helper or compute manually
+import { TxnBuilderTypes, HexString } from "supra-l1-sdk";
+
+// Derive resource account address from admin address + seed
+const adminAddr  = TxnBuilderTypes.AccountAddress.fromHex("ADMIN_ADDRESS");
+const seed       = new TextEncoder().encode("protocol_v1"); // same seed as in Move
+const resourceAddr = TxnBuilderTypes.AccountAddress.fromDerivationPath(
+  adminAddr.toUint8Array(),
+  seed
+);
+console.log("Resource account address:", HexString.fromUint8Array(resourceAddr.toUint8Array()).hex());
 ```
+
+> Verify the exact helper method against the SDK docs at https://sdk-docs.supra.com — the method name may differ across SDK versions. The derivation always uses the 32-byte admin address and the exact same byte sequence as the `seed` argument passed to `account::create_resource_account` in Move.
 
 ---
 

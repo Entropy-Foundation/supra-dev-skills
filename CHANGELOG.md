@@ -10,18 +10,33 @@ All notable changes to the Supra Dev Skill are documented here.
 - **Python SDK** — Complete API rewrite. Previous examples used fabricated API (`SupraAccount.from_private_key`, `bcs.encode_u64`, etc.). Real API verified against PyPI `supra-sdk==0.1.1` and official docs: async `SupraClient`, `Account.generate()`, `Account.load_key()`, `EntryFunction.natural()` + `TransactionArgument(value, Serializer.encoder)` + `TransactionPayload` pattern.
 - **TypeScript SDK** — `invokeContractFunction` does not exist in the SDK. Replaced with real two-step pattern: `createSerializedRawTxObject` + `sendTxUsingSerializedRawTransaction`. View calls changed from `invokeView` to real `invokeViewMethod`.
 - **TypeScript version pin** — `@2.0.0` does not exist on npm (published versions start at `3.0.0`; latest is `5.0.2`). Fixed to `@5.0.2` / `@latest`.
+- **`deploy.sh`** — Added required `PROFILE` argument; both `fund-with-faucet` and `publish` now pass `--profile $PROFILE`. Script errors out with usage message if profile is omitted.
+- **`core_topics.md`** — Added `aptos_std` exception section at the bottom. The previous blanket "replace all aptos_ with supra_" rule was stated without qualification — any Claude session reading only this file would produce broken SmartTable/Table imports.
+- **`advanced_examples.move`** — Added `E_ALREADY_EXECUTED: u64 = 7` constant; `execute_timelock` now uses it instead of the semantically wrong `E_ALREADY_EXISTS`. Added NFT ownership check in `transfer_nft`: `assert!(item.owner == admin_addr, E_NOT_ADMIN)`.
+- **`patterns.md` / `sdk_guide.md`** — Fixed simulation method: `simulateTransaction(account, "addr", ...)` does not exist. Correct pattern is `createRawTxObject(...)` → `simulateTx(account, rawTxn)`.
 
 ### Significant Fixes
-- **`aptos_std` exception callout** — Added prominent warning in SKILL.md and `supra_vs_aptos.md`: `aptos_std::` (SmartTable, Table, type_info, etc.) keeps its prefix on Supra. The "replace aptos_ with supra_" rule applies only to `aptos_framework::`. Without this, developers will break their SmartTable imports.
+- **`aptos_std` exception callout** — Added `aptos_std` exception in SKILL.md (two critical warning blocks), `supra_vs_aptos.md`, and `core_topics.md`. Added complete list: SmartTable, Table, type_info, string_utils, math64, math128, comparator, from_bcs. Added `aptos_token` exception (legacy NFT at 0x3).
 - **Move.toml pin guidance** — Added link to framework commit history and `git log` tip for finding stable commit hashes.
-- **`--profile` flag** — Added to all `publish`, `run`, and `move account` CLI commands. Missing flag causes silent failures or confusing prompts.
-- **Account activation** — Added note: accounts don't exist on-chain until funded. `fund-with-faucet` must run before `publish`. Missing this causes "account not found" errors.
-- **dVRF return type** — `vector<u256>` confirmed correct against actual interface source (both testnet and mainnet). Added comment pointing to interface source for verification.
-- **Automation CLI** — Added `--profile` flag and explicit warning to verify `register_task` argument format against live docs before deploying.
-- **FA Mainnet guidance** — Clarified that FA works on testnet but mainnet requires `coin_wrapper`; recommend building with `coin` standard from day one if targeting mainnet.
+- **`--profile` flag** — Added to all CLI commands in SKILL.md, `deploy.sh`, `native_features.md` dVRF CLI, and dVRF example in SKILL.md.
+- **Account activation** — Added note: accounts don't exist on-chain until funded. `fund-with-faucet` must run before `publish`.
+- **Oracle dependency** — Added Move.toml `[addresses]` note for `supra_oracle` with link to docs. Oracle is on-chain, not a git dep.
+- **dVRF `deposit::` CLI** — Fixed bare `deposit::` prefix to `<DEPOSIT_CONTRACT_ADDRESS>::deposit::...` with link to docs for the real address.
+- **dVRF return type** — `vector<u256>` confirmed against interface source. Added comment with source link.
+- **Automation CLI** — Added `--profile` and warning to verify `register_task` argument format against live docs.
+- **FA Mainnet guidance** — Recommend `coin` standard from day one if targeting mainnet.
+- **`token_contract.move`** — Added `burn()` function (was promised in file header but missing). Added registration prerequisite warning to `mint()`.
+- **`object_model.md`** — Added `aptos_token` exception note, Digital Assets (`0x4`) mainnet verification caveat.
+- **`supra_vs_aptos.md`** — Expanded `aptos_std` exception list and added `aptos_token` second exception section.
+- **`patterns.md`** — Fixed `SupraAccount` constructor to canonical form (`Uint8Array.from(Buffer.from(...))`). Added Section 5: Table/SmartTable destruction lifecycle with worked example and quick-reference table.
+- **`resource_accounts.md`** — Added TypeScript SDK address derivation example with `AccountAddress.fromDerivationPath`.
+- **`deploy.sh`** — Added Docker context note (script must run inside container).
+- **SKILL.md** — Install URL verification note, Docker container requirement callout. `Last Reviewed` date replaced with "See CHANGELOG.md".
+- **TypeScript `0x1` = supra_framework** — Added explicit note in `sdk_guide.md` that `supra_framework` lives at `0x1`.
+- **README.md** — Added "How to Load This Skill into Claude Code" section (three options: CLAUDE.md import, direct read, copy).
 
 ### BCS encoding table
-- Fixed `address` encoding: use `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` (not `BCS.bcsToBytes(...)`)
+- Fixed `address` encoding: `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` (not `BCS.bcsToBytes(...)`)
 - Added `BCS.bcsSerializeStr` for string/vector<u8> arguments
 - Added Python `Serializer` encoder reference table
 

@@ -45,6 +45,29 @@ supra-dev-skills/
     └── test_examples.move            # Full unit test suite patterns
 ```
 
+## How to Load This Skill into Claude Code
+
+This skill works by making `SKILL.md` available to Claude as project context. Three ways to do this:
+
+### Option A — Add to `.claude/CLAUDE.md` (recommended)
+In your project root, create `.claude/CLAUDE.md` and add:
+```markdown
+@/path/to/supra-dev-skills/SKILL.md
+```
+Claude Code automatically reads `.claude/CLAUDE.md` at the start of every session in that project.
+
+### Option B — Reference files directly in your prompt
+```
+/read /path/to/supra-dev-skills/SKILL.md
+```
+
+### Option C — Copy into your project's CLAUDE.md
+Copy the contents of `SKILL.md` directly into your project's `.claude/CLAUDE.md` alongside any project-specific instructions.
+
+Once loaded, Claude will use the skill's patterns and guidance for all Supra Move development in that project.
+
+---
+
 ## Quick Start
 
 ### 1. Setup Environment
@@ -52,7 +75,7 @@ supra-dev-skills/
 ./scripts/setup_env.sh
 ```
 
-### 2. Create a New Package
+### 2. Create a New Package (from INSIDE the container)
 ```bash
 docker exec -it supra_cli /bin/bash
 supra move tool init --package-dir /supra/move_workspace/myProject --name myProject
@@ -60,7 +83,8 @@ supra move tool init --package-dir /supra/move_workspace/myProject --name myProj
 
 ### 3. Build and Deploy
 ```bash
-./scripts/deploy.sh myProject
+# ⚠️ Run this from INSIDE the supra_cli container, not from your host shell
+./scripts/deploy.sh myProject myAccount testnet
 ```
 
 ## Networks

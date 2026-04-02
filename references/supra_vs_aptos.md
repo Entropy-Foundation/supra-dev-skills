@@ -10,20 +10,38 @@ If you are coming from Aptos, this is your quick reference for what changes on S
 
 ## The Exception: `aptos_std` Stays as `aptos_std`
 
-> **Do NOT rename `aptos_std::` to anything else.** `SmartTable`, `Table`, `type_info`, and other standard library types keep their `aptos_std::` prefix on Supra. These paths are shared, unchanged.
+> **Do NOT rename `aptos_std::` to anything else.** The standard library is shared between Aptos and Supra unchanged. Renaming anything under `aptos_std::` will cause a compile error.
 
 ```move
-// CORRECT — aptos_std stays as-is
+// CORRECT — all of these keep their aptos_std:: prefix on Supra
 use aptos_std::smart_table::{Self, SmartTable};
 use aptos_std::table::{Self, Table};
 use aptos_std::type_info;
+use aptos_std::string_utils;
+use aptos_std::math64;
+use aptos_std::math128;
+use aptos_std::comparator;
+use aptos_std::from_bcs;
 
-// WRONG — these paths do not exist on Supra
+// WRONG — none of these exist
 use supra_std::smart_table::SmartTable;        // compile error
 use supra_framework::smart_table::SmartTable;  // compile error
+use supra_std::math64;                         // compile error
 ```
 
-The rename rule applies **only to `aptos_framework::`**.
+The rename rule applies **only to `aptos_framework::`**. Leave `aptos_std::` and `aptos_token::` untouched.
+
+## Second Exception: `aptos_token` Is Not Renamed
+
+The legacy NFT module at address `0x3` is `aptos_token::token` on Supra. Do not rename it.
+
+```move
+// CORRECT — legacy token module keeps its path
+use aptos_token::token;   // 0x3::token
+
+// WRONG
+use supra_token::token;   // compile error — does not exist
+```
 
 ---
 

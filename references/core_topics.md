@@ -186,3 +186,25 @@ use supra_framework::supra_coin::SupraCoin;  // NOT AptosCoin
 ```
 
 All `aptos_framework::` imports must be replaced with `supra_framework::`.
+
+## ⚠️ Exception: `aptos_std::` Stays As-Is
+
+> **Do NOT rename `aptos_std::` imports.** The standard library (`aptos_std`) is shared between Aptos and Supra and keeps its prefix unchanged. Renaming it to `supra_std::` or `supra_framework::` will cause a compile error.
+
+```move
+// CORRECT — aptos_std keeps its prefix on Supra
+use aptos_std::smart_table::{Self, SmartTable};
+use aptos_std::table::{Self, Table};
+use aptos_std::type_info;
+use aptos_std::string_utils;
+use aptos_std::math64;
+use aptos_std::math128;
+
+// WRONG — these paths do not exist
+use supra_std::smart_table::SmartTable;        // compile error
+use supra_framework::table::Table;             // compile error
+```
+
+The rename rule is: **replace `aptos_framework::` → `supra_framework::`**. That is all. Do not touch `aptos_std::`.
+
+Also note: `aptos_token::token` (the legacy NFT standard at `0x3`) is another exception — it is not renamed to `supra_token`. Use it as-is for legacy token interactions.
