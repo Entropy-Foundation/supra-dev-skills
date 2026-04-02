@@ -31,6 +31,18 @@ use supra_std::math64;                         // compile error
 
 The rename rule applies **only to `aptos_framework::`**. Leave `aptos_std::` and `aptos_token::` untouched.
 
+## Governance Naming Anomaly
+
+> ⚠️ Governance does not follow the simple rename pattern. `aptos_framework::governance` becomes `supra_framework::supra_governance` — note the extra `supra_` prefix on the module name itself, not just the framework. This is the only module in the mapping that changes its name (not just its framework prefix).
+
+```move
+// WRONG — simple rename
+use supra_framework::governance;
+
+// CORRECT — module name also changed
+use supra_framework::supra_governance;
+```
+
 ## Second Exception: `aptos_token` Is Not Renamed
 
 The legacy NFT module at address `0x3` is `aptos_token::token` on Supra. Do not rename it.
@@ -79,7 +91,7 @@ use supra_framework::supra_governance;
 | Event Handling | `aptos_framework::event` | `supra_framework::event` |
 | Fungible Assets | `aptos_framework::fungible_asset` | `supra_framework::fungible_asset` |
 | Multisig | `aptos_framework::multisig_account` | `supra_framework::multisig_account` |
-| Governance | `aptos_framework::governance` | `supra_framework::supra_governance` |
+| Governance | `aptos_framework::governance` | `supra_framework::supra_governance` ⚠️ |
 | Staking/Consensus | `aptos_framework::staking_config` | `supra_framework::staking_config` |
 | Randomness | External/manual | Native dVRF (built-in) |
 

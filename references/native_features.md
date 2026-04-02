@@ -11,7 +11,7 @@ You request randomness, and Supra calls back your contract with the result.
 
 > ⚠️ **Important:** dVRF requires whitelisting. Submit a request:
 > https://forms.gle/WFvpBXg67GmDrokv5
-> Minimum deposit: 10 SUPRA on testnet.
+> Minimum deposit amount: check current requirements at https://docs.supra.com/dvrf/build-supra-l1/v2-guide (the deposit covers callback gas costs and may change).
 
 ### Move.toml Dependency
 
@@ -238,30 +238,45 @@ module my_module::auto_tasks {
 
 ### Register Task via CLI
 
+Use the **dedicated `supra move automation register` subcommand** — do NOT use `supra move tool run` for automation registration.
+
 ```bash
-supra move tool run \
-  --function-id 'supra_automation::automation_registry::register_task' \
-  --args \
-    string:'my_module::auto_tasks::auto_top_up' \
-    address:<USER_ADDRESS> \
-    u64:<MIN_BALANCE> \
-    u64:<TOP_UP_AMOUNT> \
-    u64:<MAX_GAS_AMOUNT> \
-    u64:<GAS_PRICE_CAP> \
-    u64:<AUTOMATION_FEE_CAP> \
-    u64:<EXPIRY_TIME_UNIX> \
+supra move automation register \
+  --task-max-gas-amount 50000 \
+  --task-gas-price-cap 200 \
+  --task-expiry-time-secs <UNIX_TIMESTAMP> \
+  --task-automation-fee-cap 10000 \
+  --function-id "my_module::auto_tasks::auto_top_up" \
+  --args address:<USER_ADDRESS> U64:<MIN_BALANCE> U64:<TOP_UP_AMOUNT> \
+  --profile myAccount \
+  --rpc-url https://rpc-testnet.supra.com
+```
+
+Dry-run before committing:
+```bash
+supra move automation register --simulate \
+  --task-max-gas-amount 50000 \
+  --task-gas-price-cap 200 \
+  --task-expiry-time-secs <UNIX_TIMESTAMP> \
+  --task-automation-fee-cap 10000 \
+  --function-id "my_module::auto_tasks::auto_top_up" \
+  --args address:<USER_ADDRESS> U64:<MIN_BALANCE> U64:<TOP_UP_AMOUNT> \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
 ### Key Parameters
-| Parameter | Description |
+| Flag | Description |
 |---|---|
-| `max_gas_amount` | Max gas the task can consume per execution |
-| `gas_price_cap` | Skip block if network gas exceeds this value |
-| `automation_fee_cap` | Max fee per epoch |
-| expiry time | Unix timestamp when the task stops |
+| `--task-max-gas-amount` | Max gas units the task may consume per execution |
+| `--task-gas-price-cap` | Skip execution if network gas price exceeds this |
+| `--task-automation-fee-cap` | Max automation fee per epoch |
+| `--task-expiry-time-secs` | Unix timestamp when the task stops |
+| `--function-id` | Full function path: `"address::module::function"` |
+| `--args` | BCS-typed args: `address:0x...`, `U64:1000`, etc. |
+| `--simulate` | Dry-run — validate without submitting |
 
-**Docs:** https://docs.supra.com/automation/smart-contract-integration
+**Docs:** https://docs.supra.com/automation/getting-started
 
 ---
 

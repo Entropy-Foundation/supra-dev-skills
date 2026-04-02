@@ -113,22 +113,35 @@ let (resource_signer, resource_cap) = account::create_resource_account(admin, se
 
 ### Derive the address before deployment
 
-The resource account address is derived as `sha3_256(admin_address_bytes || seed_bytes || 0xFF)` where `admin_address` is the 32-byte canonical form (zero-padded). In TypeScript, use the SDK's `AccountAddress` utility rather than computing this manually:
+The resource account address is derived as `sha3_256(admin_address_bytes || seed_bytes || 0xFF)` where `admin_address` is the 32-byte canonical form (zero-padded).
+
+> ⚠️ `TxnBuilderTypes.AccountAddress.fromDerivationPath` does **not** exist in `supra-l1-sdk`. The `AccountAddress` class only exposes `fromHex`, `isValid`, `standardizeAddress`, and `deserialize`.
+
+To pre-compute the resource account address in TypeScript, implement the derivation manually using the Web Crypto API or a SHA-3 library (e.g. `js-sha3`):
 
 ```typescript
+import { sha3_256 } from "js-sha3";
 import { TxnBuilderTypes, HexString } from "supra-l1-sdk";
 
-// Derive resource account address from admin address + seed
-const adminAddr  = TxnBuilderTypes.AccountAddress.fromHex("ADMIN_ADDRESS");
-const seed       = new TextEncoder().encode("protocol_v1"); // same seed as in Move
-const resourceAddr = TxnBuilderTypes.AccountAddress.fromDerivationPath(
-  adminAddr.toUint8Array(),
-  seed
+function deriveResourceAccountAddress(adminHex: string, seed: Uint8Array): string {
+  // Canonical 32-byte admin address
+  const adminAddr = TxnBuilderTypes.AccountAddress.fromHex(adminHex).toUint8Array();
+  // seed_length prefix (1 byte) + seed bytes
+  const seedLen   = new Uint8Array([seed.length]);
+  // Domain separator: 0xFF
+  const separator = new Uint8Array([0xff]);
+  const combined  = new Uint8Array([...adminAddr, ...seedLen, ...seed, ...separator]);
+  return sha3_256(combined);
+}
+
+const resourceAddress = deriveResourceAccountAddress(
+  "ADMIN_ADDRESS",
+  new TextEncoder().encode("protocol_v1")  // must match seed in Move
 );
-console.log("Resource account address:", HexString.fromUint8Array(resourceAddr.toUint8Array()).hex());
+console.log("Resource account address:", resourceAddress);
 ```
 
-> Verify the exact helper method against the SDK docs at https://sdk-docs.supra.com — the method name may differ across SDK versions. The derivation always uses the 32-byte admin address and the exact same byte sequence as the `seed` argument passed to `account::create_resource_account` in Move.
+> The Move runtime uses `0xFF` as the domain separator byte, distinct from the `0xFE` separator used for regular account address derivation. Verify against the framework source before using in production: https://github.com/Entropy-Foundation/aptos-core
 
 ---
 

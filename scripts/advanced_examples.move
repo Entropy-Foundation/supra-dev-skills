@@ -169,9 +169,12 @@ module my_module::advanced {
         assert!(table::contains(&collection.items, nft_id), E_NOT_FOUND);
 
         let item = table::borrow_mut(&mut collection.items, nft_id);
-        // Only the NFT's current owner may transfer it.
-        // In production: separate collection_addr from the signer so any user
-        // can hold and transfer NFTs from a shared collection.
+        // ⚠️  DEMO PATTERN — NOT PRODUCTION SAFE
+        // This check requires the NFT owner to also be the collection admin,
+        // which means only the admin can ever transfer. In a real NFT contract:
+        //   1. Pass collection_addr separately so any user can own NFTs
+        //   2. Let the actual NFT owner (item.owner == signer::address_of(nft_owner))
+        //      sign the transfer, not the collection admin.
         assert!(item.owner == admin_addr, E_NOT_ADMIN);
         let old_owner = item.owner;
         item.owner = new_owner;

@@ -157,11 +157,21 @@ console.log("Result:", result);
 ## Simulate Before Sending
 
 ```typescript
-const rawTxn = await client.createRawTxObject(
-  account.address(), seqNum,
-  "0xCONTRACT", "module", "function", [], [/* args */]
+// Use simulateTxUsingSerializedRawTransaction — takes the same serialized bytes
+// as sendTxUsingSerializedRawTransaction, so no extra step is needed.
+const accountInfo  = await client.getAccountInfo(account.address());
+const serializedRawTx = await client.createSerializedRawTxObject(
+  account.address(),
+  BigInt(accountInfo.sequence_number),
+  "0xCONTRACT", "module", "function",
+  [],          // TypeTag[]
+  [/* BCS-encoded args */]
 );
-const simulation = await client.simulateTx(account, rawTxn);
+const simulation = await client.simulateTxUsingSerializedRawTransaction(
+  serializedRawTx,
+  account
+);
+// simulation is Promise<any> — gas_used field contains the estimate
 console.log("Estimated gas:", simulation.gas_used);
 ```
 
@@ -331,13 +341,29 @@ Docs page: https://docs.supra.com/network/move/python-sdk
 
 Base URL (Testnet): `https://rpc-testnet.supra.com`
 
+> **API versions:** The current API is `/rpc/v3/`. Versions v1 and v2 exist but are deprecated — `/rpc/v1/` survives only for a handful of legacy transaction endpoints. Always use v3 for new integrations.
+
+### Current Endpoints (`/rpc/v3/` — use these)
+
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/rpc/v1/accounts/{address}` | Account info (includes sequence_number) |
-| GET | `/rpc/v1/accounts/{address}/resources` | All account resources |
-| GET | `/rpc/v1/accounts/{address}/resources/{type}` | Specific resource |
-| POST | `/rpc/v1/transactions` | Submit a signed transaction |
-| GET | `/rpc/v1/transactions/{hash}` | Transaction by hash |
+| GET | `/rpc/v3/accounts/{address}` | Account info (includes sequence_number) |
+| GET | `/rpc/v3/accounts/{address}/resources` | All account resources |
+| GET | `/rpc/v3/accounts/{address}/resources/{resource_type}` | Specific resource |
+| GET | `/rpc/v3/accounts/{address}/modules` | Account modules |
+| GET | `/rpc/v3/accounts/{address}/transactions` | Account transactions |
+| GET | `/rpc/v3/accounts/{address}/coin_transactions` | Coin transfer history |
+| POST | `/rpc/v3/transactions/submit` | Submit a signed transaction |
+| GET | `/rpc/v3/transactions/{hash}` | Transaction by hash |
+| POST | `/rpc/v3/transactions/simulate` | Simulate a transaction |
+| GET | `/rpc/v3/transactions/estimate_gas_price` | Current gas price |
+
+### Legacy Endpoints (v1 only — chain metadata)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/rpc/v1/transactions/chain_id` | Chain ID |
+| GET | `/rpc/v1/transactions/parameters` | Transaction parameters |
 
 Full REST API docs: https://docs.supra.com/network/move/rest-api
 

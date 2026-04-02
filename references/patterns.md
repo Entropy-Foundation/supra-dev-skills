@@ -329,10 +329,11 @@ console.log("TX hash:", txRes.txHash);
 ### Simulate Before Submitting
 
 ```typescript
-// Correct pattern: createRawTxObject first, then simulateTx
-// (simulateTransaction with this signature does NOT exist in supra-l1-sdk)
+// Use simulateTxUsingSerializedRawTransaction — reuses the same serialized bytes
+// as sendTxUsingSerializedRawTransaction (simulateTransaction / simulateTx(account, rawTxn)
+// do NOT have those signatures in supra-l1-sdk v5)
 const accountInfo = await client.getAccountInfo(account.address());
-const rawTxn = await client.createRawTxObject(
+const serializedRawTx = await client.createSerializedRawTxObject(
   account.address(),
   BigInt(accountInfo.sequence_number),
   "CONTRACT_ADDRESS",
@@ -341,7 +342,10 @@ const rawTxn = await client.createRawTxObject(
   [],          // TypeTag[]
   [/* BCS-encoded args */]
 );
-const simulation = await client.simulateTx(account, rawTxn);
+const simulation = await client.simulateTxUsingSerializedRawTransaction(
+  serializedRawTx,
+  account
+);
 console.log("Estimated gas:", simulation.gas_used);
 ```
 

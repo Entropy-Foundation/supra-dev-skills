@@ -56,9 +56,9 @@ In your project root, create `.claude/CLAUDE.md` and add:
 ```
 Claude Code automatically reads `.claude/CLAUDE.md` at the start of every session in that project.
 
-### Option B — Reference files directly in your prompt
+### Option B — Reference in your prompt using `@` syntax
 ```
-/read /path/to/supra-dev-skills/SKILL.md
+@/path/to/supra-dev-skills/SKILL.md
 ```
 
 ### Option C — Copy into your project's CLAUDE.md
@@ -105,6 +105,6 @@ supra move tool init --package-dir /supra/move_workspace/myProject --name myProj
 
 ## Skill Version
 
-- Version: 2.0.0
+- Version: 2.1.0
 - Compatible with: Supra latest stable release
 - Language: Move (MoveVM)

@@ -66,7 +66,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 - Version: 2.1.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
-- Framework: supra_framework (rev = "dev")
+- Framework: supra_framework (pin rev for production — see warning above)
 
 ---
 
@@ -672,26 +672,34 @@ module my_module::auto_tasks {
 }
 ```
 
-Register via CLI:
+Register via CLI using the **dedicated automation subcommand** (not `supra move tool run`):
+
 ```bash
-supra move tool run \
-  --function-id 'supra_automation::automation_registry::register_task' \
-  --args \
-    string:'my_module::auto_tasks::auto_top_up' \
-    address:<USER_ADDRESS> \
-    u64:<MIN_BALANCE> \
-    u64:<TOP_UP_AMOUNT> \
-    u64:<MAX_GAS_AMOUNT> \
-    u64:<GAS_PRICE_CAP> \
-    u64:<AUTOMATION_FEE_CAP> \
-    u64:<EXPIRY_TIME_UNIX> \
+supra move automation register \
+  --task-max-gas-amount 50000 \
+  --task-gas-price-cap 200 \
+  --task-expiry-time-secs <UNIX_TIMESTAMP> \
+  --task-automation-fee-cap 10000 \
+  --function-id "my_module::auto_tasks::auto_top_up" \
+  --args address:<USER_ADDRESS> U64:<MIN_BALANCE> U64:<TOP_UP_AMOUNT> \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-> ⚠️ Verify the exact `register_task` argument order and types against the official Automation docs before deploying: https://docs.supra.com/automation/smart-contract-integration — the module address and parameter layout must match the deployed `supra_automation` contract.
+Dry-run simulation before registering:
+```bash
+supra move automation register --simulate \
+  --task-max-gas-amount 50000 \
+  --task-gas-price-cap 200 \
+  --task-expiry-time-secs <UNIX_TIMESTAMP> \
+  --task-automation-fee-cap 10000 \
+  --function-id "my_module::auto_tasks::auto_top_up" \
+  --args address:<USER_ADDRESS> U64:<MIN_BALANCE> U64:<TOP_UP_AMOUNT> \
+  --profile myAccount \
+  --rpc-url https://rpc-testnet.supra.com
+```
 
-Docs: https://docs.supra.com/automation/smart-contract-integration
+Docs: https://docs.supra.com/automation/getting-started
 
 ---
 

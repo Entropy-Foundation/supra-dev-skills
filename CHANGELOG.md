@@ -4,6 +4,27 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [2.2.0] — April 2026
+
+### Critical Fixes
+- **Automation CLI** — Replaced `supra move tool run --function-id 'supra_automation::automation_registry::register_task'` with the correct dedicated subcommand `supra move automation register` and all correct flag names (`--task-max-gas-amount`, `--task-gas-price-cap`, `--task-expiry-time-secs`, `--task-automation-fee-cap`, `--function-id`, `--args`). Added `--simulate` dry-run example. Affects SKILL.md and `references/native_features.md`.
+- **REST API endpoints** — Updated from `/rpc/v1/` to `/rpc/v3/` (current API). `/rpc/v1/` and `/rpc/v2/` are deprecated. Only two legacy v1 endpoints remain (`/rpc/v1/transactions/chain_id`, `/rpc/v1/transactions/parameters`). Full v3 endpoint table added to `references/sdk_guide.md`.
+- **`setup_env.sh`** — All three command hints in "Next Steps" output now include `--profile myAccount` (`supra key generate`, `fund-with-faucet`, `publish`). Without this, subsequent `--profile` flags in deploy steps fail with "profile not found".
+
+### Significant Fixes
+- **`simulateTx` signature** — `client.simulateTx(account, rawTxn)` does not exist. Replaced with `simulateTxUsingSerializedRawTransaction(serializedRawTx, account)` in both `sdk_guide.md` and `patterns.md`. Added explicit warning that the old signature does not exist.
+- **`AccountAddress.fromDerivationPath`** — Method does not exist in `supra-l1-sdk`. Removed from `resource_accounts.md` and replaced with manual `sha3_256` derivation using `js-sha3`, with the correct domain separator (`0xFF`) and byte layout documented.
+- **`advanced_examples.move` transfer_nft** — Added prominent `DEMO PATTERN — NOT PRODUCTION SAFE` comment explaining the ownership limitation (only collection admin can hold transferable NFTs in this pattern).
+- **README version** — Updated from 2.0.0 to 2.1.0 to match SKILL.md.
+
+### Minor Fixes
+- **README Option B** — Fixed `/read /path/...` to `@/path/...` (correct Claude Code file-reference syntax).
+- **VRF minimum deposit** — Removed hardcoded "10 SUPRA on testnet" and replaced with link to live VRF docs (deposit covers callback gas costs and may change).
+- **`supra_governance` naming anomaly** — Added callout in `supra_vs_aptos.md`: governance is the only module that changes its name (not just framework prefix): `aptos_framework::governance` → `supra_framework::supra_governance`.
+- **SKILL.md version block** — Removed `Framework: supra_framework (rev = "dev")` which contradicted the top-of-file rev warning. Now says "pin rev for production — see warning above".
+
+---
+
 ## [2.1.0] — April 2026
 
 ### Critical Fixes (Would Have Broken Developers)
