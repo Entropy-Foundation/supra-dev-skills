@@ -8,6 +8,23 @@ If you are coming from Aptos, this is your quick reference for what changes on S
 
 > Replace every `aptos_framework::` with `supra_framework::`
 
+## The Exception: `aptos_std` Stays as `aptos_std`
+
+> **Do NOT rename `aptos_std::` to anything else.** `SmartTable`, `Table`, `type_info`, and other standard library types keep their `aptos_std::` prefix on Supra. These paths are shared, unchanged.
+
+```move
+// CORRECT — aptos_std stays as-is
+use aptos_std::smart_table::{Self, SmartTable};
+use aptos_std::table::{Self, Table};
+use aptos_std::type_info;
+
+// WRONG — these paths do not exist on Supra
+use supra_std::smart_table::SmartTable;        // compile error
+use supra_framework::smart_table::SmartTable;  // compile error
+```
+
+The rename rule applies **only to `aptos_framework::`**.
+
 ---
 
 ## Import Path Changes

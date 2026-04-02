@@ -24,6 +24,10 @@ rev = "dev"
 subdir = "aptos-move/framework/supra-framework"
 ```
 
+To find a stable commit hash: browse the commit history at
+https://github.com/Entropy-Foundation/aptos-core/commits/dev
+or run `git log --oneline -20` inside the Supra CLI container after pulling the latest image.
+
 ---
 
 ## ⚠️ CRITICAL: Always Use supra_framework
@@ -37,6 +41,23 @@ use aptos_framework::coin;
 use supra_framework::account;
 use supra_framework::coin;
 ```
+
+## ⚠️ CRITICAL: aptos_std Exception — Do NOT Rename
+
+`aptos_std` types (`SmartTable`, `Table`, `type_info`, etc.) **keep their `aptos_std::` prefix on Supra**. Do not change these to `supra_std::` or `supra_framework::` — those paths do not exist and will fail to compile.
+
+```move
+// CORRECT — keep aptos_std for these
+use aptos_std::smart_table::{Self, SmartTable};
+use aptos_std::table::{Self, Table};
+use aptos_std::type_info;
+
+// WRONG — do not rename aptos_std
+use supra_std::smart_table::SmartTable;       // compile error
+use supra_framework::smart_table::SmartTable; // compile error
+```
+
+The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. The `aptos_std::` standard library is shared and unchanged.
 
 ---
 
@@ -110,7 +131,13 @@ rev = "master"
 
 ## SECTION: KEY CLI COMMANDS
 
+> **Account activation:** An account does not exist on-chain until it receives funds. Always run `fund-with-faucet` before trying to publish or call contracts — otherwise you'll get an "account not found" error. The faucet call both creates and funds the account in one step.
+
+> **`--profile` flag:** The Supra CLI needs to know which account is signing each transaction. Pass `--profile <name>` to any `publish`, `run`, or `view` command that requires a signer. If you omit it, the CLI uses whichever profile is currently active.
+
 ```bash
+# ── Setup ───────────────────────────────────────────────────────
+
 # Create a new Move package
 supra move tool init --package-dir /supra/move_workspace/myProject --name myProject
 
@@ -120,40 +147,52 @@ supra move tool compile --package-dir /supra/move_workspace/myProject
 # Run tests
 supra move tool test --package-dir /supra/move_workspace/myProject
 
-# Generate key / account
+# ── Account management ─────────────────────────────────────────
+
+# Generate key / account (creates the profile)
 supra key generate --key-type ed25519 --profile myAccount
 
-# Activate profile
-supra key activate-profile myAccount
+# Fund from testnet faucet (ALSO creates the account on-chain)
+supra move account fund-with-faucet --profile myAccount --rpc-url https://rpc-testnet.supra.com
 
-# Fund from testnet faucet
-supra move account fund-with-faucet --rpc-url https://rpc-testnet.supra.com
+# List profiles
+supra profile list
 
-# Publish to testnet
-supra move tool publish --package-dir /supra/move_workspace/myProject --rpc-url https://rpc-testnet.supra.com
+# ── Deploy ─────────────────────────────────────────────────────
+
+# Publish to testnet (--profile specifies the signer)
+supra move tool publish \
+  --package-dir /supra/move_workspace/myProject \
+  --profile myAccount \
+  --rpc-url https://rpc-testnet.supra.com
 
 # Publish upgrade (backward-compatible changes only)
-supra move tool publish --package-dir /supra/move_workspace/myProject --rpc-url https://rpc-testnet.supra.com --upgrade-policy compatible
+supra move tool publish \
+  --package-dir /supra/move_workspace/myProject \
+  --profile myAccount \
+  --rpc-url https://rpc-testnet.supra.com \
+  --upgrade-policy compatible
+
+# ── Interact ───────────────────────────────────────────────────
 
 # Call an entry function
 supra move tool run \
   --function-id 'my_module::counter::increment' \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
 # Call with arguments
 supra move tool run \
   --function-id 'my_module::registry::register' \
   --args address:0xcafe u64:100 "string:hello" \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
-# Read a view function
+# Read a view function (no --profile needed — read-only)
 supra move tool view \
   --function-id 'my_module::counter::get_value' \
   --args address:0xcafe \
   --rpc-url https://rpc-testnet.supra.com
-
-# List profiles
-supra profile -l
 ```
 
 ---
@@ -363,7 +402,7 @@ The FA migration is **disabled on Mainnet**. For custom fungible tokens on Mainn
 https://github.com/Entropy-Foundation/aptos-core/blob/dev/aptos-move/move-examples/swap/sources/coin_wrapper.move
 ```
 
-The FA standard (`supra_framework::fungible_asset`) works normally on Testnet.
+The FA standard (`supra_framework::fungible_asset`) compiles and runs on Testnet, but your mainnet launch will need the `coin_wrapper` workaround. **If you're targeting mainnet, build with the `coin` standard from day one** (`supra_framework::coin`) — do not rely on FA patterns that only work on testnet. See `scripts/token_contract.move` for the correct coin-standard approach.
 
 ---
 
@@ -544,6 +583,9 @@ module my_module::lottery {
         rng_count: u8,
         client_seed: u64,
     ) acquires RandomNumberList {
+        // Return type is vector<u256> — confirmed in both testnet and mainnet
+        // VRF interface source: https://github.com/Entropy-Foundation/vrf-interface
+        // Always verify against the interface before deploying to production
         let verified_nums: vector<u256> = supra_vrf::verify_callback(
             nonce, message, signature, caller_address, rng_count, client_seed,
         );
@@ -631,8 +673,11 @@ supra move tool run \
     u64:<GAS_PRICE_CAP> \
     u64:<AUTOMATION_FEE_CAP> \
     u64:<EXPIRY_TIME_UNIX> \
+  --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
+
+> ⚠️ Verify the exact `register_task` argument order and types against the official Automation docs before deploying: https://docs.supra.com/automation/smart-contract-integration — the module address and parameter layout must match the deployed `supra_automation` contract.
 
 Docs: https://docs.supra.com/automation/smart-contract-integration
 
@@ -640,28 +685,60 @@ Docs: https://docs.supra.com/automation/smart-contract-integration
 
 ## SECTION: SDK
 
-See `references/sdk_guide.md` for complete SDK reference.
+See `references/sdk_guide.md` for complete SDK reference including multi-agent transactions, simulation, and Python async patterns.
 
-### TypeScript — Quick Contract Call
+### TypeScript — Install
+```bash
+npm install supra-l1-sdk           # latest (currently 5.0.2)
+npm install supra-l1-sdk@5.0.2    # pin for production
+```
+
+> ⚠️ Version `@2.0.0` does not exist on npm — published versions start at `3.0.0`.
+
+### TypeScript — State-Modifying Contract Call
+
+> ⚠️ There is **no `invokeContractFunction`** method. The real pattern is `createSerializedRawTxObject` → `sendTxUsingSerializedRawTransaction`.
 
 ```typescript
 import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
 
-const client = await SupraClient.init("https://rpc-testnet.supra.com/");
+const client  = await SupraClient.init("https://rpc-testnet.supra.com/");
 const account = new SupraAccount(Uint8Array.from(Buffer.from("PRIVATE_KEY_HEX", "hex")));
 
-// Call: public entry fun register(admin: &signer, member: address, score: u64)
-await client.invokeContractFunction(
-  account,
-  "0xYOUR_CONTRACT_ADDRESS",
-  "registry",
-  "register",
-  [],   // type args
+// Get sequence number (required for every transaction)
+const accountInfo = await client.getAccountInfo(account.address());
+const seqNum = BigInt(accountInfo.sequence_number);
+
+// Call: public entry fun register(admin: &signer, member: address, name: vector<u8>, score: u64)
+const rawTx = await client.createSerializedRawTxObject(
+  account.address(),          // sender
+  seqNum,                     // sequence number (bigint)
+  "0xYOUR_CONTRACT_ADDRESS",  // module address
+  "registry",                 // module name
+  "register",                 // function name
+  [],                         // TypeTag[] — empty if no generic params
   [
-    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xbeef")), // address
-    BCS.bcsSerializeUint64(BigInt(100)),                               // u64
-  ],
-  { enableTransactionWaitAndSimulationArgs: { enableWaitForTransaction: true } }
+    TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(), // address
+    BCS.bcsSerializeStr("Alice"),                                     // string/vector<u8>
+    BCS.bcsSerializeUint64(BigInt(100)),                              // u64
+  ]
+);
+const response = await client.sendTxUsingSerializedRawTransaction(rawTx, account);
+console.log("TX hash:", response.txHash);
+```
+
+### TypeScript — View Function Call
+
+> Use `invokeViewMethod` (not `invokeContractFunction`) for read-only calls.
+
+```typescript
+const result = await client.invokeViewMethod(
+  "0xYOUR_CONTRACT_ADDRESS", "leaderboard", "get_score",
+  [],
+  [
+    TxnBuilderTypes.AccountAddress.fromHex("REGISTRY_ADDR").toUint8Array(),
+    TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR").toUint8Array(),
+  ]
 );
 ```
 
@@ -669,12 +746,13 @@ await client.invokeContractFunction(
 
 | Move type | TypeScript |
 |---|---|
-| `address` | `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))` |
+| `address` | `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` |
 | `u8` | `BCS.bcsSerializeU8(42)` |
 | `u64` | `BCS.bcsSerializeUint64(BigInt(1000))` |
 | `u128` | `BCS.bcsSerializeU128(BigInt("999"))` |
 | `bool` | `BCS.bcsSerializeBool(true)` |
-| `vector<u8>` / string | `BCS.bcsSerializeBytes(Buffer.from("text"))` |
+| `string` | `BCS.bcsSerializeStr("text")` |
+| `vector<u8>` (raw bytes) | `BCS.bcsSerializeBytes(new Uint8Array([1,2,3]))` |
 
 ---
 

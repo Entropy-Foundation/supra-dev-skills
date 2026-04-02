@@ -4,6 +4,29 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [2.1.0] — April 2026
+
+### Critical Fixes (Would Have Broken Developers)
+- **Python SDK** — Complete API rewrite. Previous examples used fabricated API (`SupraAccount.from_private_key`, `bcs.encode_u64`, etc.). Real API verified against PyPI `supra-sdk==0.1.1` and official docs: async `SupraClient`, `Account.generate()`, `Account.load_key()`, `EntryFunction.natural()` + `TransactionArgument(value, Serializer.encoder)` + `TransactionPayload` pattern.
+- **TypeScript SDK** — `invokeContractFunction` does not exist in the SDK. Replaced with real two-step pattern: `createSerializedRawTxObject` + `sendTxUsingSerializedRawTransaction`. View calls changed from `invokeView` to real `invokeViewMethod`.
+- **TypeScript version pin** — `@2.0.0` does not exist on npm (published versions start at `3.0.0`; latest is `5.0.2`). Fixed to `@5.0.2` / `@latest`.
+
+### Significant Fixes
+- **`aptos_std` exception callout** — Added prominent warning in SKILL.md and `supra_vs_aptos.md`: `aptos_std::` (SmartTable, Table, type_info, etc.) keeps its prefix on Supra. The "replace aptos_ with supra_" rule applies only to `aptos_framework::`. Without this, developers will break their SmartTable imports.
+- **Move.toml pin guidance** — Added link to framework commit history and `git log` tip for finding stable commit hashes.
+- **`--profile` flag** — Added to all `publish`, `run`, and `move account` CLI commands. Missing flag causes silent failures or confusing prompts.
+- **Account activation** — Added note: accounts don't exist on-chain until funded. `fund-with-faucet` must run before `publish`. Missing this causes "account not found" errors.
+- **dVRF return type** — `vector<u256>` confirmed correct against actual interface source (both testnet and mainnet). Added comment pointing to interface source for verification.
+- **Automation CLI** — Added `--profile` flag and explicit warning to verify `register_task` argument format against live docs before deploying.
+- **FA Mainnet guidance** — Clarified that FA works on testnet but mainnet requires `coin_wrapper`; recommend building with `coin` standard from day one if targeting mainnet.
+
+### BCS encoding table
+- Fixed `address` encoding: use `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` (not `BCS.bcsToBytes(...)`)
+- Added `BCS.bcsSerializeStr` for string/vector<u8> arguments
+- Added Python `Serializer` encoder reference table
+
+---
+
 ## [2.0.0] — April 2026
 
 ### Bug Fixes

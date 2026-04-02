@@ -257,16 +257,22 @@ const buyer  = new SupraAccount(Buffer.from("BUYER_PRIVATE_KEY_HEX",  "hex"));
 
 // Build a multi-agent (multi-signer) transaction
 // seller is the primary signer, buyer is the secondary signer
-const txRes = await client.sendMultiAgentTransaction(
-  seller,           // primary signer
-  [buyer],          // secondary signers array
-  new HexString("CONTRACT_ADDRESS"),
+const sellerInfo = await client.getAccountInfo(seller.address());
+const rawTxn = await client.createRawTxObject(
+  seller.address(),
+  BigInt(sellerInfo.sequence_number),
+  new HexString("CONTRACT_ADDRESS").hex(),
   "escrow",
   "settle",
-  [],               // type args
-  [],               // function args (seller and buyer come from signers)
-  { enableTransactionWaitAndSimulationArgs: { enableWaitForTransaction: true } }
+  [],   // TypeTag[]
+  []    // function args — seller and buyer signers are provided separately
 );
+const txRes = await client.sendMultiAgentTransaction(
+  seller,     // primary signer (SupraAccount)
+  [buyer],    // secondary signers (SupraAccount[])
+  rawTxn
+);
+console.log("Escrow settled:", txRes.txHash);
 console.log("Escrow settled:", txRes);
 ```
 
@@ -290,22 +296,25 @@ console.log("Escrow settled:", txRes);
 ```
 
 ```typescript
-// In TypeScript SDK — set gas parameters
-const txOptions = {
-  maxGasAmount: BigInt(10000),    // max gas units
-  gasUnitPrice: BigInt(100),      // Quants per unit
-  enableTransactionWaitAndSimulationArgs: { enableWaitForTransaction: true },
-};
+// In TypeScript SDK — set gas parameters via OptionalTransactionPayloadArgs
+const accountInfo = await client.getAccountInfo(account.address());
+const seqNum = BigInt(accountInfo.sequence_number);
 
-const txRes = await client.invokeContractFunction(
-  account,
+const rawTx = await client.createSerializedRawTxObject(
+  account.address(),
+  seqNum,
   "CONTRACT_ADDRESS",
   "module_name",
   "function_name",
-  [],
-  [/* args */],
-  txOptions
+  [],          // TypeTag[]
+  [/* BCS-encoded args */],
+  {
+    maxGas:       BigInt(10000),  // max gas units
+    gasUnitPrice: BigInt(100),    // Quants per unit
+  }
 );
+const txRes = await client.sendTxUsingSerializedRawTransaction(rawTx, account);
+console.log("TX hash:", txRes.txHash);
 ```
 
 ### Common Gas Pitfalls
