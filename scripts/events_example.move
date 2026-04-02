@@ -20,6 +20,10 @@ module my_module::registry {
 
     // ============================================================
     // On-chain Data
+    // ⚠️ vector is used here to demonstrate events and basic storage patterns.
+    // For registries expected to exceed ~100 members, use SmartTable instead:
+    //   members: SmartTable<address, String>  → O(1) lookup, gas stays flat
+    // See references/patterns.md Section 1 for the SmartTable pattern.
     // ============================================================
     struct Registry has key {
         members: vector<address>,
