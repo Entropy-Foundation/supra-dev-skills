@@ -11,7 +11,7 @@ You request randomness, and Supra calls back your contract with the result.
 
 > ⚠️ **Important:** dVRF requires whitelisting. Submit a request:
 > https://forms.gle/WFvpBXg67GmDrokv5
-> Minimum deposit amount: check current requirements at https://docs.supra.com/dvrf/build-supra-l1/v2-guide (the deposit covers callback gas costs and may change).
+> Minimum deposit amount: check current requirements at https://docs.supra.com/dvrf/build-supra-l1/v3-guide (the deposit covers callback gas costs and may change).
 
 ### Move.toml Dependency
 
@@ -125,7 +125,7 @@ supra move tool view \
 # ⚠️  'deposit::' is NOT a valid function-id prefix.
 # A full function-id requires: <deployed_address>::<module>::<function>
 # Get the deployed address of the VRF deposit contract from:
-# https://docs.supra.com/dvrf/build-supra-l1/v2-guide
+# https://docs.supra.com/dvrf/build-supra-l1/v3-guide
 #
 # Example (replace DEPOSIT_CONTRACT_ADDRESS with the real address):
 supra move tool run \
@@ -141,7 +141,7 @@ supra move tool run \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-**Docs:** https://docs.supra.com/dvrf/build-supra-l1/v2-guide
+**Docs:** https://docs.supra.com/dvrf/build-supra-l1/v3-guide
 
 ---
 

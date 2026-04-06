@@ -279,9 +279,12 @@ Note: Any function reading global storage must declare `acquires ResourceName`.
 ### Data Types
 
 ```move
-let a: u8 = 255;
-let b: u64 = 1000000;
-let c: u128 = 999999999999;
+let a: u8   = 255;
+let b: u16  = 65535;
+let c: u32  = 4294967295;
+let d: u64  = 1000000;
+let e: u128 = 999999999999;
+let f: u256 = 0xdeadbeef;    // used by dVRF callbacks
 let flag: bool = true;
 let addr: address = @0xcafe;
 let v: vector<u64> = vector::empty();
@@ -399,14 +402,9 @@ public fun get_balance(addr: address): u64 {
 
 SupraCoin units: 1 SUPRA = 100,000,000 Quants (8 decimals).
 
-### Fungible Assets (FA) — Mainnet Note
+### Fungible Assets (FA)
 
-The FA migration is **disabled on Mainnet**. For custom fungible tokens on Mainnet, use the `coin_wrapper`:
-```
-https://github.com/Entropy-Foundation/aptos-core/blob/dev/aptos-move/move-examples/swap/sources/coin_wrapper.move
-```
-
-The FA standard (`supra_framework::fungible_asset`) compiles and runs on Testnet, but your mainnet launch will need the `coin_wrapper` workaround. **If you're targeting mainnet, build with the `coin` standard from day one** (`supra_framework::coin`) — do not rely on FA patterns that only work on testnet. See `scripts/token_contract.move` for the correct coin-standard approach.
+The FA standard (`supra_framework::fungible_asset`) is enabled on both Testnet and Mainnet. You can use it directly for custom fungible tokens. See `scripts/token_contract.move` for the coin-standard approach if you need the legacy `supra_framework::coin` pattern.
 
 ---
 
@@ -609,7 +607,7 @@ supra move tool run \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-Docs: https://docs.supra.com/dvrf/build-supra-l1/v2-guide
+Docs: https://docs.supra.com/dvrf/build-supra-l1/v3-guide
 
 ### Oracles — Real-Time Price Feeds
 
@@ -827,7 +825,7 @@ See `scripts/test_examples.move` for the full test suite.
 
 ## SECTION: UPGRADE / MIGRATION
 
-Move contracts are **immutable once published**. Three upgrade strategies:
+Move contracts are **upgradeable by default**. Use `--upgrade-policy immutable` to permanently lock a module. Three upgrade strategies:
 
 **1. Compatible upgrade** (add functions/structs, no removals):
 ```bash
@@ -839,6 +837,15 @@ Deploy a new module at a new address. Write a one-time `migrate` entry function 
 
 **3. Resource account proxy** (future-proof from day one):
 Store state in a resource account. Logic module can be swapped by updating the proxy's `logic_module` address field.
+
+**To publish immutably** (cannot be upgraded after deploy):
+```bash
+supra move tool publish \
+  --upgrade-policy immutable \
+  --profile myAccount \
+  --rpc-url https://rpc-testnet.supra.com
+```
+You can also set `upgrade_policy = "immutable"` in `Move.toml` under `[package]`.
 
 See `references/patterns.md` for full upgrade code examples.
 
