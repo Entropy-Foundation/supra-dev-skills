@@ -6,11 +6,24 @@
 /// - Timelock pattern with correct error code
 /// - Access control with named error constants
 
+/// Move.toml requirements for this module:
+///   [addresses]
+///   aptos_token_objects = "0x4"
+///
+///   [dependencies]
+///   SupraFramework = { git = "...", subdir = "aptos-move/framework/supra-framework", rev = "<pin>" }
+///   AptosTokenObjects = { git = "...", subdir = "aptos-move/framework/aptos-token-objects", rev = "<pin>" }
+///
+/// Verify the exact git URL and rev for your target network against the official Supra docs.
+
 module my_module::advanced {
     use supra_framework::event;
     use supra_framework::signer;
     use supra_framework::timestamp;
-    use aptos_std::table::{Self, Table};
+    use supra_framework::object::{Self, Object};
+    use aptos_token_objects::collection;
+    use aptos_token_objects::token;
+    use std::option;
     use std::string::{Self, String};
 
     // ============================================================
@@ -74,112 +87,119 @@ module my_module::advanced {
     }
 
     // ============================================================
-    // Pattern 2: NFT Collection using Table (O(1) lookup)
+    // Pattern 2: Digital Asset NFT (Aptos Token Objects / DA standard)
     //
-    // KEY LESSON: Use Table<u64, NFTItem> keyed by ID — NOT vector<NFTItem>.
-    // A vector requires O(n) scan for transfer/lookup.
-    // Table gives O(1) access and scales to millions of NFTs.
+    // Uses aptos_token_objects (0x4) — the correct on-chain NFT standard.
+    // Each token is a real on-chain Object with a unique address.
+    // Refs (MutatorRef, BurnRef) must be captured at creation time because
+    // ConstructorRef expires at the end of the transaction.
+    //
+    // Collection: created once per creator address.
+    // Tokens:     numbered ("Name #1", "Name #2", ...), fully burnable.
+    // Transfer:   owner-signed via object::transfer — no admin involvement.
     // ============================================================
-    struct NFTItem has store {
-        id: u64,
-        name: String,
-        description: String,
-        owner: address,
-        created_at: u64,
-    }
 
-    struct NFTCollection has key {
-        items: Table<u64, NFTItem>,  // key = NFT ID
-        next_id: u64,
-        total_minted: u64,
-        admin: address,
+    // Change these for your project
+    const COLLECTION_NAME: vector<u8> = b"My Supra Collection";
+    const COLLECTION_DESC: vector<u8> = b"A demonstration NFT collection on Supra";
+    const COLLECTION_URI:  vector<u8> = b"https://example.com/collection";
+
+    /// Refs stored on each token object.
+    /// #[resource_group_member] is required for structs stored on Objects.
+    #[resource_group_member(group = supra_framework::object::ObjectGroup)]
+    struct NFTToken has key {
+        mutator_ref: token::MutatorRef,
+        burn_ref:    token::BurnRef,
     }
 
     #[event]
     struct NFTMinted has drop, store {
-        id: u64,
+        token_address: address,
         name: String,
-        owner: address,
+        recipient: address,
     }
 
     #[event]
     struct NFTTransferred has drop, store {
-        id: u64,
+        token_address: address,
         from: address,
         to: address,
     }
 
-    public entry fun create_collection(admin: &signer) {
-        let addr = signer::address_of(admin);
-        assert!(!exists<NFTCollection>(addr), E_ALREADY_EXISTS);
-
-        move_to(admin, NFTCollection {
-            items: table::new(),
-            next_id: 1,
-            total_minted: 0,
-            admin: addr,
-        });
+    /// Create the on-chain collection. Call once — collection names are
+    /// unique per creator address.
+    public entry fun create_collection(creator: &signer) {
+        collection::create_unlimited_collection(
+            creator,
+            string::utf8(COLLECTION_DESC),
+            string::utf8(COLLECTION_NAME),
+            option::none(),      // royalty
+            string::utf8(COLLECTION_URI),
+        );
     }
 
+    /// Mint a token into the collection and send it to recipient.
+    /// Produces a numbered token: "<name> #1", "<name> #2", etc.
+    /// Numbered tokens (unlike named tokens) can be fully destroyed via burn.
     public entry fun mint_nft(
-        admin: &signer,
+        creator: &signer,
         recipient: address,
         name: vector<u8>,
         description: vector<u8>,
-    ) acquires NFTCollection, AdminConfig {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<NFTCollection>(admin_addr), E_NOT_INITIALIZED);
+        uri: vector<u8>,
+    ) {
+        let constructor_ref = token::create_numbered_token(
+            creator,
+            string::utf8(COLLECTION_NAME),
+            string::utf8(description),
+            string::utf8(name),
+            string::utf8(b""),   // name suffix — empty for clean display
+            option::none(),      // royalty
+            string::utf8(uri),
+        );
 
-        // Block if contract is paused
-        assert_not_paused(admin_addr);
+        // Capture all refs before ConstructorRef expires at end of this tx
+        let object_signer = object::generate_signer(&constructor_ref);
+        let mutator_ref   = token::generate_mutator_ref(&constructor_ref);
+        let burn_ref      = token::generate_burn_ref(&constructor_ref);
 
-        let collection = borrow_global_mut<NFTCollection>(admin_addr);
-        assert!(collection.admin == admin_addr, E_NOT_ADMIN);
+        // Store refs on the token object (not on the creator's account)
+        move_to(&object_signer, NFTToken { mutator_ref, burn_ref });
 
-        let id = collection.next_id;
-        let name_str = string::utf8(name);
+        // Transfer to recipient using a one-shot linear ref
+        let transfer_ref = object::generate_transfer_ref(&constructor_ref);
+        let linear_ref   = object::generate_linear_transfer_ref(&transfer_ref);
+        object::transfer_with_ref(linear_ref, recipient);
 
-        table::add(&mut collection.items, id, NFTItem {
-            id,
-            name: name_str,
-            description: string::utf8(description),
-            owner: recipient,
-            created_at: timestamp::now_seconds(),
-        });
-
-        collection.next_id = id + 1;
-        collection.total_minted = collection.total_minted + 1;
-
-        event::emit(NFTMinted { id, name: name_str, owner: recipient });
+        let token_address = signer::address_of(&object_signer);
+        event::emit(NFTMinted { token_address, name: string::utf8(name), recipient });
     }
 
-    /// Transfer NFT — O(1) lookup via Table, no linear scan
+    /// Transfer an NFT — called by the current owner, not the creator.
+    /// object::transfer aborts automatically if signer is not the owner.
     public entry fun transfer_nft(
-        admin: &signer,
-        nft_id: u64,
+        owner: &signer,
+        nft: Object<NFTToken>,
         new_owner: address,
-    ) acquires NFTCollection, AdminConfig {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<NFTCollection>(admin_addr), E_NOT_INITIALIZED);
+    ) {
+        let from = signer::address_of(owner);
+        object::transfer(owner, nft, new_owner);
+        event::emit(NFTTransferred {
+            token_address: object::object_address(&nft),
+            from,
+            to: new_owner,
+        });
+    }
 
-        // Block if contract is paused
-        assert_not_paused(admin_addr);
-
-        let collection = borrow_global_mut<NFTCollection>(admin_addr);
-        assert!(table::contains(&collection.items, nft_id), E_NOT_FOUND);
-
-        let item = table::borrow_mut(&mut collection.items, nft_id);
-        // ⚠️  DEMO PATTERN — NOT PRODUCTION SAFE
-        // This check requires the NFT owner to also be the collection admin,
-        // which means only the admin can ever transfer. In a real NFT contract:
-        //   1. Pass collection_addr separately so any user can own NFTs
-        //   2. Let the actual NFT owner (item.owner == signer::address_of(nft_owner))
-        //      sign the transfer, not the collection admin.
-        assert!(item.owner == admin_addr, E_NOT_ADMIN);
-        let old_owner = item.owner;
-        item.owner = new_owner;
-
-        event::emit(NFTTransferred { id: nft_id, from: old_owner, to: new_owner });
+    /// Burn (permanently destroy) an NFT. Must be called by the current owner.
+    public entry fun burn_nft(
+        owner: &signer,
+        nft: Object<NFTToken>,
+    ) acquires NFTToken {
+        assert!(object::is_owner(nft, signer::address_of(owner)), E_NOT_ADMIN);
+        let token_address = object::object_address(&nft);
+        let NFTToken { mutator_ref: _, burn_ref } = move_from<NFTToken>(token_address);
+        token::burn(burn_ref);
     }
 
     // ============================================================
@@ -221,9 +241,8 @@ module my_module::advanced {
     // ============================================================
 
     #[view]
-    public fun get_total_minted(collection_addr: address): u64 acquires NFTCollection {
-        assert!(exists<NFTCollection>(collection_addr), E_NOT_INITIALIZED);
-        borrow_global<NFTCollection>(collection_addr).total_minted
+    public fun token_owner(nft: Object<NFTToken>): address {
+        object::owner(nft)
     }
 
     #[view]
@@ -240,10 +259,4 @@ module my_module::advanced {
         else { action.unlock_time - now }
     }
 
-    #[view]
-    public fun nft_owner(collection_addr: address, nft_id: u64): address acquires NFTCollection {
-        let collection = borrow_global<NFTCollection>(collection_addr);
-        assert!(table::contains(&collection.items, nft_id), E_NOT_FOUND);
-        table::borrow(&collection.items, nft_id).owner
-    }
 }
