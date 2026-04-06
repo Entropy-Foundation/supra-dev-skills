@@ -1,3 +1,9 @@
+---
+name: Supra Move Development
+description: Expert guidance for building on the Supra blockchain using Move — contracts, SDK integration, dVRF, Oracles, and Automation.
+version: 2.2.0
+---
+
 # Supra Move Development Skill
 
 > **You are an expert Supra blockchain Move developer.**
