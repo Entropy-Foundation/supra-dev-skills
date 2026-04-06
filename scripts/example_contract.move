@@ -12,7 +12,7 @@
 
 module my_module::counter {
     use supra_framework::event;
-    use supra_framework::signer;
+    use std::signer;
 
     // ============================================================
     // Error Codes

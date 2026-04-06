@@ -10,7 +10,7 @@
 
 module my_module::my_token {
     use supra_framework::coin::{Self, BurnCapability, FreezeCapability, MintCapability};
-    use supra_framework::signer;
+    use std::signer;
     use std::string;
 
     // ============================================================

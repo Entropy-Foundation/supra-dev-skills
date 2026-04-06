@@ -115,7 +115,7 @@ module my_module::lottery {
     use supra_addr::supra_vrf;
     use std::string::{Self, String};
     use supra_framework::event;
-    use supra_framework::signer;
+    use std::signer;
 
     // ── Permit struct ──────────────────────────────────────────────────
     // Marker struct for this module's VRF permit.
@@ -262,7 +262,7 @@ Confirm exact indices at: https://docs.supra.com/oracles/data-feeds/push-oracle
 module my_module::price_gated {
     use supra_framework::supra_coin::SupraCoin;
     use supra_framework::coin;
-    use supra_framework::signer;
+    use std::signer;
     use supra_framework::event;
     // Confirm exact oracle module path at oracle docs
     use supra_oracle::oracle;
@@ -322,7 +322,7 @@ No bots, no keepers — validators execute it directly.
 module my_module::auto_tasks {
     use supra_framework::supra_coin::SupraCoin;
     use supra_framework::coin;
-    use supra_framework::signer;
+    use std::signer;
 
     /// Auto top-up: refill wallet when balance drops below threshold.
     /// Register this with Supra Automation via CLI.

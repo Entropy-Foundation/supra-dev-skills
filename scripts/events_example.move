@@ -8,7 +8,7 @@
 
 module my_module::registry {
     use supra_framework::event;
-    use supra_framework::signer;
+    use std::signer;
     use std::vector;
     use std::string::{Self, String};
 

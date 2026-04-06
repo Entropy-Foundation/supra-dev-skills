@@ -425,7 +425,7 @@ public entry fun initialize(admin: &signer) {
 ### Access Control
 
 ```move
-use supra_framework::signer;
+use std::signer;
 
 public entry fun admin_action(caller: &signer) acquires Config {
     let config = borrow_global<Config>(@my_module);
@@ -553,7 +553,7 @@ module my_module::lottery {
     use supra_addr::supra_vrf;
     use std::string::{Self, String};
     use supra_framework::event;
-    use supra_framework::signer;
+    use std::signer;
 
     // Each module that calls rng_request must define its own permit struct.
     // The type parameter in permit_cap<T> ties access control to this module.
@@ -661,7 +661,7 @@ Write a condition-aware entry function, then register it with Supra Automation. 
 module my_module::auto_tasks {
     use supra_framework::supra_coin::SupraCoin;
     use supra_framework::coin;
-    use supra_framework::signer;
+    use std::signer;
 
     /// Auto top-up: refill wallet when balance drops below threshold.
     /// Condition check is INSIDE the function — exits cleanly if not triggered.

@@ -9,7 +9,7 @@
 ```move
 module my_module::leaderboard {
     use aptos_std::smart_table::{Self, SmartTable};
-    use supra_framework::signer;
+    use std::signer;
 
     struct Scores has key {
         // Maps player address → score — O(1) reads, gas stays flat as it grows
@@ -116,7 +116,7 @@ For breaking changes, build migration into the contract from day one:
 
 ```move
 module my_module::v2_protocol {
-    use supra_framework::signer;
+    use std::signer;
     use supra_framework::account::SignerCapability;
 
     const E_NOT_ADMIN: u64 = 1;
@@ -155,7 +155,7 @@ Store state in a resource account whose address never changes. Upgrade the logic
 ```move
 module my_module::proxy {
     use supra_framework::account::{Self, SignerCapability};
-    use supra_framework::signer;
+    use std::signer;
 
     struct ProxyConfig has key {
         admin: address,
@@ -189,7 +189,7 @@ Supra supports multi-agent transactions where multiple signers participate in a 
 module my_module::escrow {
     use supra_framework::supra_coin::SupraCoin;
     use supra_framework::coin;
-    use supra_framework::signer;
+    use std::signer;
     use supra_framework::event;
 
     const E_WRONG_BUYER: u64 = 1;
@@ -361,7 +361,7 @@ This is one of the most common compile errors for new Move developers.
 module my_module::lifecycle {
     use aptos_std::smart_table::{Self, SmartTable};
     use aptos_std::table::{Self, Table};
-    use supra_framework::signer;
+    use std::signer;
 
     struct Registry has key {
         scores: SmartTable<address, u64>,

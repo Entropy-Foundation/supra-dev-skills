@@ -22,7 +22,7 @@ module my_module::vault {
     use supra_framework::account::{Self, SignerCapability};
     use supra_framework::supra_coin::SupraCoin;
     use supra_framework::coin;
-    use supra_framework::signer;
+    use std::signer;
     use supra_framework::event;
 
     const E_NOT_ADMIN: u64 = 1;
@@ -152,7 +152,7 @@ For contracts that should create their resource account automatically on first p
 ```move
 module my_module::protocol {
     use supra_framework::account::{Self, SignerCapability};
-    use supra_framework::signer;
+    use std::signer;
 
     struct ProtocolState has key {
         resource_cap: SignerCapability,

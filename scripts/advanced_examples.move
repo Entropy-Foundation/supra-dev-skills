@@ -18,7 +18,7 @@
 
 module my_module::advanced {
     use supra_framework::event;
-    use supra_framework::signer;
+    use std::signer;
     use supra_framework::timestamp;
     use supra_framework::object::{Self, Object};
     use aptos_token_objects::collection;
