@@ -537,46 +537,59 @@ See `scripts/token_contract.move` for the full example.
 
 ## SECTION: NATIVE FEATURES
 
-### dVRF — On-Chain Verifiable Randomness
+### dVRF 3.0 — On-Chain Verifiable Randomness
 
 dVRF uses a **request → callback** pattern. You call `rng_request`, Supra calls your `distribute` function back with the verified random numbers.
 
-**Requires whitelisting:** https://forms.gle/WFvpBXg67GmDrokv5
+**VRF 3.0 access control** uses a `permit_cap<phantom T>` mechanism — two whitelisting steps required before your contract can request randomness:
+1. Whitelist your wallet address (self-whitelist)
+2. Whitelist your contract module (module-whitelist, specifying `"address::module_name"`)
+
+See `references/native_features.md` for the full whitelisting walkthrough and CLI commands.
 
 ```move
 module my_module::lottery {
     use aptos_std::table;
     use supra_addr::supra_vrf;
-    use std::string;
+    use std::string::{Self, String};
+    use supra_framework::event;
+    use supra_framework::signer;
 
-    struct RandomNumberList has key {
+    // Each module that calls rng_request must define its own permit struct.
+    // The type parameter in permit_cap<T> ties access control to this module.
+    struct LotteryPermit {}
+
+    struct State has key {
         random_numbers: table::Table<u64, vector<u256>>,
+        // permit_cap is acquired once during init and stored here
+        permit_cap: supra_vrf::permit_cap<LotteryPermit>,
     }
 
+    // Called once at deployment — wallet + module must be whitelisted first
+    // Exact registration function: verify against v3 interface source
     fun init_module(sender: &signer) {
-        move_to(sender, RandomNumberList { random_numbers: table::new() });
+        let cap = supra_vrf::create_permit_cap<LotteryPermit>(sender);
+        move_to(sender, State { random_numbers: table::new(), permit_cap: cap });
     }
 
     // Step 1: Request randomness
+    // VRF 3.0: no sender/callback_address/callback_module — permit_cap provides
+    // module identity; Supra derives the callback module from the type parameter.
     public entry fun rng_request(
-        sender: &signer,
-        rng_count: u8,         // how many random numbers (max 255)
+        rng_count: u8,         // how many numbers (max 255)
         client_seed: u64,      // extra entropy, 0 is fine
         num_confirmations: u64,
-    ) acquires RandomNumberList {
-        let nonce = supra_vrf::rng_request(
-            sender,
-            @my_module,
-            string::utf8(b"lottery"),
-            string::utf8(b"distribute"),
+    ) acquires State {
+        let state = borrow_global_mut<State>(@my_module);
+        let nonce = supra_vrf::rng_request<LotteryPermit>(
+            &state.permit_cap,
+            string::utf8(b"distribute"),  // callback function name in this module
             rng_count, client_seed, num_confirmations,
         );
-        let list = borrow_global_mut<RandomNumberList>(@my_module);
-        table::add(&mut list.random_numbers, nonce, vector[]);
+        table::add(&mut state.random_numbers, nonce, vector[]);
     }
 
-    // Step 2: Supra calls this automatically with verified random numbers
-    // Signature must match exactly — 6 parameters in this order
+    // Step 2: Supra calls this automatically — signature must match exactly
     public entry fun distribute(
         nonce: u64,
         message: vector<u8>,
@@ -584,15 +597,12 @@ module my_module::lottery {
         caller_address: address,
         rng_count: u8,
         client_seed: u64,
-    ) acquires RandomNumberList {
-        // Return type is vector<u256> — confirmed in both testnet and mainnet
-        // VRF interface source: https://github.com/Entropy-Foundation/vrf-interface
-        // Always verify against the interface before deploying to production
+    ) acquires State {
         let verified_nums: vector<u256> = supra_vrf::verify_callback(
             nonce, message, signature, caller_address, rng_count, client_seed,
         );
-        let list = borrow_global_mut<RandomNumberList>(@my_module);
-        let slot = table::borrow_mut(&mut list.random_numbers, nonce);
+        let state = borrow_global_mut<State>(@my_module);
+        let slot = table::borrow_mut(&mut state.random_numbers, nonce);
         *slot = verified_nums;
     }
 }
