@@ -10,9 +10,15 @@
 ///   [addresses]
 ///   aptos_token_objects = "0x4"
 ///
-///   [dependencies]
-///   SupraFramework = { git = "...", subdir = "aptos-move/framework/supra-framework", rev = "<pin>" }
-///   AptosTokenObjects = { git = "...", subdir = "aptos-move/framework/aptos-token-objects", rev = "<pin>" }
+///   [dependencies.SupraFramework]
+///   git = "https://github.com/Entropy-Foundation/aptos-core.git"
+///   subdir = "aptos-move/framework/supra-framework"
+///   rev = "dev"   # pin to a commit hash for production
+///
+///   [dependencies.AptosTokenObjects]
+///   git = "https://github.com/Entropy-Foundation/aptos-core.git"
+///   subdir = "aptos-move/framework/aptos-token-objects"
+///   rev = "dev"   # pin to a commit hash for production
 ///
 /// Verify the exact git URL and rev for your target network against the official Supra docs.
 

@@ -61,7 +61,7 @@ supra move tool run \
 ```
 
 > ⚠️ Replace `<VRF_CONTRACT_ADDRESS>` and module/function names with the actual deployed values.
-> Get them from: https://docs.supra.com/dvrf/build-supra-l1/v3-guide
+> Get them from: https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 **Step 3 — Fund your deposit account:**
 ```bash
@@ -75,7 +75,7 @@ supra move tool run \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-> Minimum deposit amount: see current requirements at https://docs.supra.com/dvrf/build-supra-l1/v3-guide
+> Minimum deposit amount: see current requirements at https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 ---
 
@@ -210,7 +210,7 @@ VRF 3.0 requires clients to specify the **maximum transaction fee** for receivin
 
 When your balance falls below Min Balance, VRF responses stop. Fund the deposit account to resume.
 
-> Configure `max_txn_fee` during the deposit/registration step. Verify the exact parameter name against the v3 docs: https://docs.supra.com/dvrf/build-supra-l1/v3-guide
+> Configure `max_txn_fee` during the deposit/registration step. Verify the exact parameter name against the v3 docs: https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 ---
 
@@ -247,7 +247,7 @@ supra move tool view \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-**Docs:** https://docs.supra.com/dvrf/build-supra-l1/v3-guide
+**Docs:** https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 ---
 

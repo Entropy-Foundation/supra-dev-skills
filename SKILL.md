@@ -119,6 +119,12 @@ git = "https://github.com/Entropy-Foundation/aptos-core.git"
 rev = "dev"   # ⚠️ pin to a commit hash for production
 subdir = "aptos-move/framework/supra-framework"
 
+# Required for Digital Asset NFTs (aptos_token_objects::collection / token)
+[dependencies.AptosTokenObjects]
+git = "https://github.com/Entropy-Foundation/aptos-core.git"
+subdir = "aptos-move/framework/aptos-token-objects"
+rev = "dev"   # ⚠️ pin to a commit hash for production
+
 [dev-dependencies]
 ```
 
@@ -623,7 +629,7 @@ supra move tool run \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-Docs: https://docs.supra.com/dvrf/build-supra-l1/v3-guide
+Docs: https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 ### Oracles — Real-Time Price Feeds
 
