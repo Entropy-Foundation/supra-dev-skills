@@ -1,7 +1,7 @@
 ---
 name: Supra Move Development
 description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
-version: 2.2.0
+version: 2.3.0
 ---
 
 # Supra Move Development Skill
@@ -9,6 +9,106 @@ version: 2.2.0
 > **You are an expert Supra blockchain Move developer.**
 > Supra is a high-performance Layer 1 blockchain with MoveVM + EVM. This skill covers MoveVM only.
 > For EVM/Solidity on Supra: https://docs.supra.com/network/evm/
+
+---
+
+## COMPILER RULES - APPLY TO EVERY FILE YOU WRITE
+
+These four rules cause compile errors on every single contract. They are not edge cases. Apply them before writing any code.
+
+---
+
+### RULE 1 - No `///` comments. Use `//` only.
+
+`///` is not valid Move syntax on Supra. Every `///` is a compile error.
+
+```move
+// WRONG - compile error on every line
+/// This module does X
+/// param: the value
+
+// CORRECT
+// This module does X
+// param: the value
+```
+
+This applies everywhere: file headers, function docs, inline comments. Never use `///`.
+
+---
+
+### RULE 2 - ASCII only. No Unicode in source files.
+
+Move only allows ASCII characters (0x20-0x7E). Non-ASCII kills the build **even inside comments**.
+
+```
+error[E01001]: invalid character
+```
+
+Characters that will always break compilation:
+
+| You might type | Unicode | Use this instead |
+|---|---|---|
+| `--` (em dash) | U+2014 | `--` |
+| `-` (en dash) | U+2013 | `-` |
+| `---` (box drawing) | U+2500 | `-` |
+| `~=` (almost equal) | U+2248 | `~=` |
+| `->` (arrow) | U+2192 | `->` |
+| `'` `'` (curly quotes) | U+2018/19 | `'` |
+| `"` `"` (curly double quotes) | U+201C/D | `"` |
+
+Do not use Unicode separators like `----------` in comments. Use plain ASCII hyphens `----------`.
+
+---
+
+### RULE 3 - Type casts: ALWAYS `(expr as T)`. Parens are required.
+
+The Move cast syntax is `(exp as type)`. The parentheses are not optional - they are part of the syntax. Writing `expr as T` without the wrapping parens is always a compile error.
+
+```
+error[E01002]: unexpected token
+  | let x = (some_expr) as u64;
+  |                      ^^ Unexpected 'as'
+```
+
+```move
+// WRONG - every one of these is a compile error
+let a = value as u64;
+let b = my_struct.field as u128;
+let c = (complex_expr) as u64;
+let d = ((a as u128) * b) as u64;
+
+// CORRECT - the entire cast is wrapped in parens
+let a = (value as u64);
+let b = (my_struct.field as u128);
+let c = ((complex_expr) as u64);
+let d = (((a as u128) * b) as u64);
+```
+
+**Mnemonic:** count your parens. If `as` appears, the IMMEDIATELY enclosing `(` must open right before `expr` and the matching `)` must come after `T`. There must be nothing outside `(expr as T)` except operators or `;`.
+
+---
+
+### RULE 4 - `acquires` list must be exact.
+
+Every function that reads global storage must declare `acquires`. The rules:
+
+1. **Missing = compile error** (`error[E04020]: missing acquires annotation`)
+2. **Extra (unused) = compile error** (`error[E02002]: unnecessary or extraneous item`)
+3. **Transitive** - if your function calls a helper that acquires `Foo`, YOUR function must also list `Foo`
+
+```move
+// Helper acquires ResourceA
+fun helper() acquires ResourceA { borrow_global<ResourceA>(@addr); }
+
+// Caller MUST list ResourceA because it calls helper()
+public entry fun do_thing() acquires ResourceB, ResourceA {
+    let _ = borrow_global<ResourceB>(@addr);  // direct
+    helper();                                  // transitive - ResourceA required
+}
+
+// WRONG - ResourceA missing (transitive), ResourceC listed but never used
+public entry fun do_thing() acquires ResourceB, ResourceC { ... }
+```
 
 ---
 
@@ -69,7 +169,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.2.0
+- Version: 2.3.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
 - Framework: supra_framework (pin rev for production - see warning above)
@@ -235,30 +335,13 @@ use aptos_std::smart_table::{Self, SmartTable}; // iterable key-value storage
 
 ### Comments
 
-Move uses `//` for all comments. `//` doc comments are **not supported** - they will cause a compile error.
-
-```move
-// This is a valid comment
-// Multi-line: just use multiple // lines
-
-// WRONG - do not use:
-// This causes a compile error on Supra Move
-```
+> See RULE 1 at the top of this file. Use `//` only. Never `///`.
 
 ---
 
 ### ASCII-only source files
 
-Move only permits ASCII printable characters, tabs, and newlines. Non-ASCII characters - even in comments and doc strings - cause a compile error:
-
-```
-error[E01001]: invalid character
-  | // My module - does X   - em dash kills the build
-  |                ^ Invalid character '-'
-```
-
-Never use: `-` `-` `'` `'` `"` `"` or any other Unicode punctuation.
-Use instead: `-` or `--` for dashes, `'` for apostrophes, `"` for quotes.
+> See RULE 2 at the top of this file. No Unicode characters anywhere in .move files.
 
 ---
 
@@ -333,7 +416,7 @@ public fun get_value(addr: address): u64 acquires MyData {
 }
 ```
 
-Note: Any function reading global storage must declare `acquires ResourceName`.
+> See RULE 4 at the top of this file. `acquires` must be exact and transitive.
 
 ### Data Types
 
@@ -349,16 +432,7 @@ let addr: address = @0xcafe;
 let v: vector<u64> = vector::empty();
 ```
 
-**Casting - `as` must be inside its own parentheses:**
-```move
-// WRONG - compiler error: unexpected 'as'
-let x = (rand % count) as u64;
-
-// CORRECT - as is the outermost operator inside the parens
-let x = ((rand % count) as u64);
-let y = (my_u64 as u128);
-let z = (vector::length(&v) as u256);
-```
+> See RULE 3 at the top of this file. Every cast is `(expr as T)` — parens required, no exceptions.
 
 ### Events
 
