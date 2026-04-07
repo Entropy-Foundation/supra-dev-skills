@@ -4,9 +4,9 @@ Supra has built-in features that most blockchains don't have natively.
 
 ---
 
-## 1. dVRF 3.0 — On-Chain Verifiable Randomness
+## 1. dVRF 3.0 - On-Chain Verifiable Randomness
 
-Supra dVRF uses a **request/callback** pattern — NOT a synchronous call.
+Supra dVRF uses a **request/callback** pattern - NOT a synchronous call.
 You request randomness, and Supra calls back your contract with the result.
 
 ### What Changed in VRF 3.0
@@ -15,9 +15,9 @@ VRF 3.0 replaces the old `sender + callback_address + callback_module` approach 
 
 | | VRF 2.x | VRF 3.0 |
 |---|---|---|
-| Auth | `&signer` + raw addresses | `permit_cap<phantom T>` |
+| Auth | `&signer` + raw addresses | `SupraVRFPermit<phantom T>` (`supra_addr::deposit`) |
 | Callback routing | explicit `callback_address + callback_module` | derived from type parameter `T` |
-| Whitelisting | single contract whitelist | two-level: wallet address + module |
+| Whitelisting | single contract whitelist | `whitelist_client_address` + `deposit_fund_v2` |
 | Gas coverage | client deposit only | client deposit **or** gas credits (gasless) |
 
 ### Move.toml Dependency
@@ -42,35 +42,22 @@ rev = "master"
 
 VRF 3.0 requires **two whitelisting steps** before your contract can request randomness.
 
-**Step 1 — Whitelist your wallet address (self-whitelist):**
+**Step 1 - Whitelist your wallet address and set max transaction fee:**
 ```bash
 supra move tool run \
-  --function-id '<VRF_CONTRACT_ADDRESS>::<whitelist_module>::whitelist_address' \
+  --function-id 'supra_addr::deposit::whitelist_client_address' \
+  --args u64:<max_txn_fee> \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
 
-**Step 2 — Whitelist your contract module:**
-```bash
-# Format: "address::module_name"
-supra move tool run \
-  --function-id '<VRF_CONTRACT_ADDRESS>::<whitelist_module>::whitelist_module' \
-  --args string:'my_module::lottery' \
-  --profile myAccount \
-  --rpc-url https://rpc-testnet.supra.com
-```
+> `max_txn_fee`: set to `0` to use the default fee value, or a positive integer to cap the per-response fee.
 
-> ⚠️ Replace `<VRF_CONTRACT_ADDRESS>` and module/function names with the actual deployed values.
-> Get them from: https://docs.supra.com/dvrf/build-supra-l1/getting-started
-
-**Step 3 — Fund your deposit account:**
+**Step 2 - Fund your deposit account:**
 ```bash
-# ⚠️ 'deposit::' alone is not a valid function-id prefix.
-# Use the full: <DEPOSIT_CONTRACT_ADDRESS>::deposit::<function>
-# Get the deposit contract address from the v3 guide (linked above).
 supra move tool run \
-  --function-id '<DEPOSIT_CONTRACT_ADDRESS>::deposit::deposit_fund' \
-  --args u64:1000000000 \
+  --function-id 'supra_addr::deposit::deposit_fund_v2' \
+  --args address:<your_address> u64:<amount> \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
@@ -79,28 +66,31 @@ supra move tool run \
 
 ---
 
-### permit_cap Pattern
+### SupraVRFPermit Pattern
 
-VRF 3.0 uses `supra_vrf::permit_cap<phantom T>` for access control. Each module that calls `rng_request` must:
+VRF 3.0 uses `SupraVRFPermit<phantom T>` from `supra_addr::deposit` for access control. Each module that calls `rng_request_v2` must:
 
-1. Define a **permit struct** — an empty marker struct local to the module
-2. Acquire a `permit_cap<T>` once (in `init_module`) and store it
-3. Pass `&permit_cap` to every `rng_request` call
+1. Define a **permit struct** - an empty marker struct local to the module
+2. Acquire a `SupraVRFPermit<T>` once via `deposit::init_vrf_module<T>(sender)` (in `init_module`) and store it
+3. Call `deposit::enable_module<T>(sender)` after acquiring the permit
+4. Pass `&SupraVRFPermit<T>` to every `rng_request_v2` call
 
-The type parameter `T` must be a type defined in **the same module** as your callback function. This ties the callback routing to the permit — Supra derives the callback module address from the type.
+The type parameter `T` must be a type defined in **the same module** as your callback function. This ties the callback routing to the permit - Supra derives the callback module address from the type.
 
 ```move
-// addr::module1 defines permit1 — only this module can use permit_cap<permit1>
+// addr::module1 defines permit1 - only this module can use SupraVRFPermit<permit1>
 module my_module::module1 {
+    use supra_addr::deposit::{Self, SupraVRFPermit};
     struct permit1 {}
-    // permit_cap<permit1> can only be used to call back into my_module::module1
+    // SupraVRFPermit<permit1> can only be used to call back into my_module::module1
 }
 ```
 
 Multiple modules can each have their own permit:
 ```move
-// addr::module2 defines permit2 — separate access control from module1
+// addr::module2 defines permit2 - separate access control from module1
 module my_module::module2 {
+    use supra_addr::deposit::{Self, SupraVRFPermit};
     struct permit2 {}
 }
 ```
@@ -113,20 +103,21 @@ module my_module::module2 {
 module my_module::lottery {
     use aptos_std::table;
     use supra_addr::supra_vrf;
+    use supra_addr::deposit::{Self, SupraVRFPermit};
     use std::string::{Self, String};
     use supra_framework::event;
     use std::signer;
 
-    // ── Permit struct ──────────────────────────────────────────────────
+    // -- Permit struct --------------------------------------------------
     // Marker struct for this module's VRF permit.
-    // The type parameter in permit_cap<T> is tied to this module —
-    // only this module can use permit_cap<LotteryPermit>.
+    // The type parameter in SupraVRFPermit<T> is tied to this module -
+    // only this module can use SupraVRFPermit<LotteryPermit>.
     struct LotteryPermit {}
 
-    // ── State ──────────────────────────────────────────────────────────
+    // -- State ----------------------------------------------------------
     struct State has key {
         random_numbers: table::Table<u64, vector<u256>>,
-        permit_cap:     supra_vrf::permit_cap<LotteryPermit>,
+        permit_cap:     SupraVRFPermit<LotteryPermit>,
     }
 
     #[event]
@@ -135,28 +126,29 @@ module my_module::lottery {
     #[event]
     struct RandomnessReceived has drop, store { nonce: u64, count: u64 }
 
-    // ── Initialization ─────────────────────────────────────────────────
+    // -- Initialization -------------------------------------------------
     // Wallet address AND module must be whitelisted before deploying.
-    // Exact function name for permit_cap acquisition: verify against
-    // https://github.com/Entropy-Foundation/vrf-interface (v3 branch)
+    // deposit::init_vrf_module acquires the SupraVRFPermit; enable_module
+    // activates the module for VRF callbacks.
     fun init_module(sender: &signer) {
-        let cap = supra_vrf::create_permit_cap<LotteryPermit>(sender);
+        let cap = deposit::init_vrf_module<LotteryPermit>(sender);
+        deposit::enable_module<LotteryPermit>(sender);
         move_to(sender, State {
             random_numbers: table::new(),
             permit_cap: cap,
         });
     }
 
-    // ── Step 1: Request randomness ─────────────────────────────────────
+    // -- Step 1: Request randomness -------------------------------------
     // VRF 3.0: no sender/callback_address/callback_module params.
-    // permit_cap identifies the module; Supra derives callback routing from T.
+    // SupraVRFPermit identifies the module; Supra derives callback routing from T.
     public entry fun rng_request(
         rng_count: u8,          // how many numbers (max 255)
         client_seed: u64,       // extra entropy, 0 is fine
         num_confirmations: u64, // blocks before callback fires
     ) acquires State {
         let state = borrow_global_mut<State>(@my_module);
-        let nonce = supra_vrf::rng_request<LotteryPermit>(
+        let nonce = supra_vrf::rng_request_v2<LotteryPermit>(
             &state.permit_cap,
             string::utf8(b"distribute"), // callback function name in this module
             rng_count,
@@ -167,9 +159,13 @@ module my_module::lottery {
         event::emit(RandomnessRequested { nonce });
     }
 
-    // ── Step 2: Callback ───────────────────────────────────────────────
-    // Supra calls this automatically. Signature must match exactly —
+    // -- Step 2: Callback -----------------------------------------------
+    // Supra calls this automatically. Signature must match exactly -
     // 6 parameters in this exact order. Return type is always vector<u256>.
+    //
+    // -- DEFENSIVE GUARD: always verify your contract is in the expected
+    // "waiting for VRF" state before processing. Without this, a replayed
+    // or out-of-order callback can silently corrupt live state.
     public entry fun distribute(
         nonce: u64,
         message: vector<u8>,
@@ -178,18 +174,21 @@ module my_module::lottery {
         rng_count: u8,
         client_seed: u64,
     ) acquires State {
+        // Guard: nonce must be in the pending table - rejects unexpected callbacks
+        let state = borrow_global_mut<State>(@my_module);
+        assert!(table::contains(&state.random_numbers, nonce), E_NOT_INITIALIZED);
+
         // verify_callback authenticates the VRF response and returns random numbers
         // Interface source: https://github.com/Entropy-Foundation/vrf-interface
         let verified_nums: vector<u256> = supra_vrf::verify_callback(
             nonce, message, signature, caller_address, rng_count, client_seed,
         );
-        let state = borrow_global_mut<State>(@my_module);
         let slot = table::borrow_mut(&mut state.random_numbers, nonce);
         *slot = verified_nums;
         event::emit(RandomnessReceived { nonce, count: (rng_count as u64) });
     }
 
-    // ── View ───────────────────────────────────────────────────────────
+    // -- View -----------------------------------------------------------
     #[view]
     public fun get_random_numbers(nonce: u64): vector<u256> acquires State {
         *table::borrow(&borrow_global<State>(@my_module).random_numbers, nonce)
@@ -206,7 +205,7 @@ VRF 3.0 requires clients to specify the **maximum transaction fee** for receivin
 | `max_txn_fee` | Behavior |
 |---|---|
 | `0` | VRF contract applies a default fee value |
-| `> 0` | Min Balance Per Client = Max Response Txns × `max_txn_fee` |
+| `> 0` | Min Balance Per Client = Max Response Txns - `max_txn_fee` |
 
 When your balance falls below Min Balance, VRF responses stop. Fund the deposit account to resume.
 
@@ -224,7 +223,7 @@ VRF 3.0 introduces a **gas credit** grant system so clients can receive VRF resp
 - Credits are consumed **before** SUPRA token balance
 - Gas credits **cannot** be withdrawn as SUPRA
 
-Spending priority: `gas credits → SUPRA deposit`
+Spending priority: `gas credits - SUPRA deposit`
 
 When both are exhausted, the standard minimum-balance rules apply.
 
@@ -240,7 +239,7 @@ supra move tool run \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
-# Read the result back (view call — no profile needed)
+# Read the result back (view call - no profile needed)
 supra move tool view \
   --function-id 'my_module::lottery::get_random_numbers' \
   --args u64:0 \
@@ -251,7 +250,7 @@ supra move tool view \
 
 ---
 
-## 2. Native Oracles — Real-Time Price Feeds
+## 2. Native Oracles - Real-Time Price Feeds
 
 Each price pair has a numeric **pair index** (e.g. BTC_USDT = 0, ETH_USDT = 1).
 Confirm exact indices at: https://docs.supra.com/oracles/data-feeds/push-oracle
@@ -274,14 +273,14 @@ module my_module::price_gated {
         from: address, to: address, amount: u64, btc_price: u128,
     }
 
-    /// Only allow transfer if BTC/USDT price is above threshold
+    // Only allow transfer if BTC/USDT price is above threshold
     public entry fun price_gated_transfer(
         sender: &signer,
         recipient: address,
         amount: u64,
         min_btc_price: u128,
     ) {
-        // Fetch BTC/USDT — pair index 0 (verify at oracle docs)
+        // Fetch BTC/USDT - pair index 0 (verify at oracle docs)
         // Returns (price, decimal, timestamp)
         let (price, _decimal, _timestamp) = oracle::get_price(0);
 
@@ -309,12 +308,12 @@ module my_module::price_gated {
 
 ---
 
-## 3. Native Automation — Schedule Contract Execution
+## 3. Native Automation - Schedule Contract Execution
 
 Supra Automation registers a Move entry function to run automatically each block.
-**The condition lives INSIDE your function** — not in an external script.
+**The condition lives INSIDE your function** - not in an external script.
 
-No bots, no keepers — validators execute it directly.
+No bots, no keepers - validators execute it directly.
 
 ### Automation-Compatible Contract
 
@@ -324,9 +323,9 @@ module my_module::auto_tasks {
     use supra_framework::coin;
     use std::signer;
 
-    /// Auto top-up: refill wallet when balance drops below threshold.
-    /// Register this with Supra Automation via CLI.
-    /// Condition is checked inside the function — exits cleanly if not met.
+    // Auto top-up: refill wallet when balance drops below threshold.
+    // Register this with Supra Automation via CLI.
+    // Condition is checked inside the function - exits cleanly if not met.
     public entry fun auto_top_up(
         source: &signer,
         user: address,
@@ -337,14 +336,14 @@ module my_module::auto_tasks {
         if (current < min_balance) {
             coin::transfer<SupraCoin>(source, user, top_up_amount);
         }
-        // If condition is false, exits cleanly — no abort
+        // If condition is false, exits cleanly - no abort
     }
 }
 ```
 
 ### Register Task via CLI
 
-Use the **dedicated `supra move automation register` subcommand** — do NOT use `supra move tool run` for automation registration.
+Use the **dedicated `supra move automation register` subcommand** - do NOT use `supra move tool run` for automation registration.
 
 ```bash
 supra move automation register \
@@ -380,7 +379,7 @@ supra move automation register --simulate \
 | `--task-expiry-time-secs` | Unix timestamp when the task stops |
 | `--function-id` | Full function path: `"address::module::function"` |
 | `--args` | BCS-typed args: `address:0x...`, `U64:1000`, etc. |
-| `--simulate` | Dry-run — validate without submitting |
+| `--simulate` | Dry-run - validate without submitting |
 
 **Docs:** https://docs.supra.com/automation/getting-started
 
@@ -389,8 +388,8 @@ supra move automation register --simulate \
 ## 4. SupraNova Bridge
 
 Transfer assets across chains. Two technologies:
-- **HyperNova** — Trustless, uses source chain consensus
-- **Hyperloop** — Fast multi-sig for L2s and high-latency chains
+- **HyperNova** - Trustless, uses source chain consensus
+- **Hyperloop** - Fast multi-sig for L2s and high-latency chains
 
 **Docs:** https://docs.supra.com/supranova
 
@@ -400,7 +399,7 @@ Transfer assets across chains. Two technologies:
 
 | Feature | Pattern | Requires Setup? |
 |---|---|---|
-| dVRF | Request → Callback (async) | ✅ Wallet + contract whitelisting |
-| Oracles | Synchronous on-chain read | ✅ Verify pair indices in docs |
-| Automation | Entry function + CLI registration | ✅ Gas caps + expiry required |
-| Bridge | SupraNova protocol | ✅ See bridge docs |
+| dVRF | Request - Callback (async) | - Wallet + contract whitelisting |
+| Oracles | Synchronous on-chain read | - Verify pair indices in docs |
+| Automation | Entry function + CLI registration | - Gas caps + expiry required |
+| Bridge | SupraNova protocol | - See bridge docs |

@@ -1,14 +1,14 @@
-/// Basic Supra Move Module Template
-/// 
-/// This is a simple counter contract demonstrating:
-/// - Module structure
-/// - Struct with key ability (on-chain storage)
-/// - Entry functions (callable via transactions)
-/// - Global storage operations
-/// - Error handling
-/// - Events
-///
-/// Deploy: supra move tool publish --package-dir /supra/move_workspace/myProject --rpc-url https://rpc-testnet.supra.com
+// Basic Supra Move Module Template
+// 
+// This is a simple counter contract demonstrating:
+// - Module structure
+// - Struct with key ability (on-chain storage)
+// - Entry functions (callable via transactions)
+// - Global storage operations
+// - Error handling
+// - Events
+//
+// Deploy: supra move tool publish --package-dir /supra/move_workspace/myProject --rpc-url https://rpc-testnet.supra.com
 
 module my_module::counter {
     use supra_framework::event;
@@ -48,7 +48,7 @@ module my_module::counter {
     // Entry Functions (callable from transactions)
     // ============================================================
 
-    /// Initialize the counter — must be called once before using
+    // Initialize the counter - must be called once before using
     public entry fun initialize(admin: &signer) {
         let admin_addr = signer::address_of(admin);
 
@@ -62,7 +62,7 @@ module my_module::counter {
         });
     }
 
-    /// Increment the counter by 1
+    // Increment the counter by 1
     public entry fun increment(caller: &signer) acquires Counter {
         let caller_addr = signer::address_of(caller);
 
@@ -80,7 +80,7 @@ module my_module::counter {
         });
     }
 
-    /// Increment by a custom amount
+    // Increment by a custom amount
     public entry fun increment_by(caller: &signer, amount: u64) acquires Counter {
         let caller_addr = signer::address_of(caller);
         assert!(exists<Counter>(caller_addr), E_NOT_INITIALIZED);
@@ -94,7 +94,7 @@ module my_module::counter {
         });
     }
 
-    /// Reset counter to 0 — only admin can call
+    // Reset counter to 0 - only admin can call
     public entry fun reset(admin: &signer) acquires Counter {
         let admin_addr = signer::address_of(admin);
         assert!(exists<Counter>(admin_addr), E_NOT_INITIALIZED);

@@ -1,6 +1,6 @@
 # Advanced Move Patterns
 
-## 1. smart_table — Scalable Key-Value Storage
+## 1. smart_table - Scalable Key-Value Storage
 
 `SmartTable` is the idiomatic choice for on-chain maps in Supra/Move. It uses a bucketed hash table under the hood, giving amortized O(1) access and gas costs that don't grow with collection size.
 
@@ -12,7 +12,7 @@ module my_module::leaderboard {
     use std::signer;
 
     struct Scores has key {
-        // Maps player address → score — O(1) reads, gas stays flat as it grows
+        // Maps player address - score - O(1) reads, gas stays flat as it grows
         scores: SmartTable<address, u64>,
         player_count: u64,
     }
@@ -86,11 +86,11 @@ smart_table::drop(data.scores);               // destroys all entries
 
 ## 2. Contract Upgrade / Migration Pattern
 
-Move contracts are **immutable once published** — you cannot edit deployed bytecode. The standard upgrade paths are:
+Move contracts are **immutable once published** - you cannot edit deployed bytecode. The standard upgrade paths are:
 
 ### Option A: Publish with `--upgrade-policy compatible`
 
-Supra (like Aptos) supports upgrading a module if the new version is **backward-compatible** — you can add functions and structs, but cannot remove or change existing ones.
+Supra (like Aptos) supports upgrading a module if the new version is **backward-compatible** - you can add functions and structs, but cannot remove or change existing ones.
 
 ```bash
 # Publish initial version
@@ -218,11 +218,11 @@ module my_module::escrow {
         });
     }
 
-    /// Multi-signer entry — both seller and buyer must sign this transaction.
-    /// The SDK submits it as a multi-agent transaction.
+    // Multi-signer entry - both seller and buyer must sign this transaction.
+    // The SDK submits it as a multi-agent transaction.
     public entry fun settle(
         seller: &signer,
-        buyer: &signer,    // second signer — must also sign the transaction
+        buyer: &signer,    // second signer - must also sign the transaction
     ) acquires EscrowOffer {
         let seller_addr = signer::address_of(seller);
         let buyer_addr = signer::address_of(buyer);
@@ -266,7 +266,7 @@ const rawTxn = await client.createRawTxObject(
   "escrow",
   "settle",
   [],   // TypeTag[]
-  []    // function args — seller and buyer signers are provided separately
+  []    // function args - seller and buyer signers are provided separately
 );
 const txRes = await client.sendMultiAgentTransaction(
   seller,     // primary signer (SupraAccount)
@@ -287,7 +287,7 @@ console.log("Escrow settled:", txRes);
 |---|---|
 | `max_gas_amount` | Upper bound on gas units the transaction may consume |
 | `gas_unit_price` | Price per gas unit in Quants (smallest SupraCoin unit) |
-| Transaction fee | `gas_used × gas_unit_price` |
+| Transaction fee | `gas_used - gas_unit_price` |
 | Abort on overrun | If gas_used > max_gas_amount, transaction aborts and fee is still charged |
 
 ### SupraCoin Units
@@ -297,7 +297,7 @@ console.log("Escrow settled:", txRes);
 ```
 
 ```typescript
-// In TypeScript SDK — set gas parameters via OptionalTransactionPayloadArgs
+// In TypeScript SDK - set gas parameters via OptionalTransactionPayloadArgs
 const accountInfo = await client.getAccountInfo(account.address());
 const seqNum = BigInt(accountInfo.sequence_number);
 
@@ -320,16 +320,16 @@ console.log("TX hash:", txRes.txHash);
 
 ### Common Gas Pitfalls
 
-1. **Vector iteration** — looping over large vectors is O(n) gas. Use `SmartTable` for collections > ~100 elements.
-2. **Nested borrows** — deep borrow chains in tight loops cost extra gas.
-3. **Events** — cheap, but emit only what subscribers need.
-4. **`move_from` + `move_to`** — prefer `borrow_global_mut` when you don't need to fully extract the resource.
-5. **Automation tasks** — always set `max_gas_amount` conservatively; tasks that run out of gas still deduct the fee.
+1. **Vector iteration** - looping over large vectors is O(n) gas. Use `SmartTable` for collections > ~100 elements.
+2. **Nested borrows** - deep borrow chains in tight loops cost extra gas.
+3. **Events** - cheap, but emit only what subscribers need.
+4. **`move_from` + `move_to`** - prefer `borrow_global_mut` when you don't need to fully extract the resource.
+5. **Automation tasks** - always set `max_gas_amount` conservatively; tasks that run out of gas still deduct the fee.
 
 ### Simulate Before Submitting
 
 ```typescript
-// Use simulateTxUsingSerializedRawTransaction — reuses the same serialized bytes
+// Use simulateTxUsingSerializedRawTransaction - reuses the same serialized bytes
 // as sendTxUsingSerializedRawTransaction (simulateTransaction / simulateTx(account, rawTxn)
 // do NOT have those signatures in supra-l1-sdk v5)
 const accountInfo = await client.getAccountInfo(account.address());
@@ -353,7 +353,7 @@ console.log("Estimated gas:", simulation.gas_used);
 
 ## 5. Table / SmartTable Destruction Lifecycle
 
-A struct containing a `Table` or `SmartTable` cannot be dropped — the compiler will reject it with "resource not droppable." You **must** explicitly destroy the collection before or during the struct removal.
+A struct containing a `Table` or `SmartTable` cannot be dropped - the compiler will reject it with "resource not droppable." You **must** explicitly destroy the collection before or during the struct removal.
 
 This is one of the most common compile errors for new Move developers.
 
@@ -368,7 +368,7 @@ module my_module::lifecycle {
         metadata: Table<u64, address>,
     }
 
-    // ✅ CORRECT — destroy inner collections before dropping the struct
+    // - CORRECT - destroy inner collections before dropping the struct
     public entry fun shutdown(admin: &signer) acquires Registry {
         let Registry { scores, metadata } = move_from<Registry>(signer::address_of(admin));
 
@@ -380,7 +380,7 @@ module my_module::lifecycle {
         table::destroy_empty(metadata); // aborts if metadata still has entries
     }
 
-    // Draining a Table before destroying it — full lifecycle
+    // Draining a Table before destroying it - full lifecycle
     public entry fun drain_and_close(admin: &signer, keys: vector<u64>) acquires Registry {
         let addr = signer::address_of(admin);
 
@@ -402,7 +402,7 @@ module my_module::lifecycle {
 
         // Step 3: destroy inner collections explicitly
         smart_table::drop(scores);         // drops all entries at once
-        table::destroy_empty(metadata);    // aborts if any keys remain — drain must be complete
+        table::destroy_empty(metadata);    // aborts if any keys remain - drain must be complete
     }
 }
 ```
@@ -411,8 +411,8 @@ module my_module::lifecycle {
 
 | Type | Destroy with |
 |---|---|
-| `SmartTable<K, V>` | `smart_table::drop(t)` — destroys all entries |
+| `SmartTable<K, V>` | `smart_table::drop(t)` - destroys all entries |
 | `SmartTable<K, V>` (if empty) | `smart_table::destroy_empty(&mut t)` |
-| `Table<K, V>` | No bulk drop — remove all entries manually, then `table::destroy_empty(t)` |
+| `Table<K, V>` | No bulk drop - remove all entries manually, then `table::destroy_empty(t)` |
 | `vector<T>` where T has `drop` | Drops automatically |
 | `vector<T>` where T has no `drop` | Must pop/unpack each element manually |

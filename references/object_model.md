@@ -68,7 +68,7 @@ public fun get_value(addr: address): u64 acquires MyData {
     borrow_global<MyData>(addr).value
 }
 
-// WRONG — will not compile
+// WRONG - will not compile
 public fun get_value(addr: address): u64 {
     borrow_global<MyData>(addr).value  // Error: missing acquires
 }
@@ -98,7 +98,7 @@ assert!(signer::address_of(caller) == @my_module, E_NOT_ADMIN);
 
 ## Resource Ownership Patterns
 
-### Pattern 1 — Stored at User's Address
+### Pattern 1 - Stored at User's Address
 Each user stores their own data:
 ```move
 public entry fun create(user: &signer) {
@@ -106,7 +106,7 @@ public entry fun create(user: &signer) {
 }
 ```
 
-### Pattern 2 — Stored at Module Address (Shared Config)
+### Pattern 2 - Stored at Module Address (Shared Config)
 Single global config stored at the module's address:
 ```move
 public entry fun initialize(admin: &signer) {
@@ -116,7 +116,7 @@ public entry fun initialize(admin: &signer) {
 }
 ```
 
-### Pattern 3 — Nested Resources
+### Pattern 3 - Nested Resources
 Resources can contain other structs (with `store` ability):
 ```move
 struct Item has store {
@@ -139,7 +139,7 @@ struct Inventory has key {
 | Fungible Asset (new) | `supra_framework::fungible_asset` | `0x1` |
 | Coin (legacy) | `supra_framework::coin` | `0x1` |
 
-⚠️ Migration from Coin to Fungible Asset is **disabled on Mainnet**. Use `coin_wrapper` for FA standard.
+-- Migration from Coin to Fungible Asset is **disabled on Mainnet**. Use `coin_wrapper` for FA standard.
 
 ### Non-Fungible Tokens (NFT)
 | Standard | Module | Address |
@@ -147,9 +147,9 @@ struct Inventory has key {
 | Digital Asset (new) | Token objects | `0x4` |
 | Token (legacy) | `aptos_token::token` | `0x3` |
 
-> ⚠️ **`aptos_token` is an exception to the rename rule.** The legacy NFT module at `0x3` is `aptos_token::token` on Supra — do not rename it to `supra_token`. Use it as-is for legacy token interactions.
+> -- **`aptos_token` is an exception to the rename rule.** The legacy NFT module at `0x3` is `aptos_token::token` on Supra - do not rename it to `supra_token`. Use it as-is for legacy token interactions.
 
-> ⚠️ **Digital Assets (`0x4`) on Mainnet:** The status of Digital Assets on Supra Mainnet should be verified against current docs (https://docs.supra.com). Given that Fungible Asset migration is disabled on Mainnet, confirm whether `0x4` token objects are fully supported before building production NFT contracts around this standard. Use the custom `Table`-based pattern (see `scripts/advanced_examples.move`) as a safe fallback.
+> -- **Digital Assets (`0x4`) on Mainnet:** The status of Digital Assets on Supra Mainnet should be verified against current docs (https://docs.supra.com). Given that Fungible Asset migration is disabled on Mainnet, confirm whether `0x4` token objects are fully supported before building production NFT contracts around this standard. Use the custom `Table`-based pattern (see `scripts/advanced_examples.move`) as a safe fallback.
 
 ---
 

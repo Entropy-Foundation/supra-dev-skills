@@ -1,6 +1,6 @@
 ---
 name: Supra Move Development
-description: Expert guidance for building on the Supra blockchain using Move — contracts, SDK integration, dVRF, Oracles, and Automation.
+description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
 version: 2.2.0
 ---
 
@@ -12,18 +12,18 @@ version: 2.2.0
 
 ---
 
-## ⚠️ CRITICAL: Move.toml rev = "dev" Warning
+## -- CRITICAL: Move.toml rev = "dev" Warning
 
 > **READ THIS FIRST.** The SupraFramework dependency uses `rev = "dev"`, which tracks the live development branch and can break builds without notice. **Always pin to a specific commit hash for any production deployment.**
 
 ```toml
-# PRODUCTION — pin to a specific commit
+# PRODUCTION - pin to a specific commit
 [dependencies.SupraFramework]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
 rev = "SPECIFIC_COMMIT_HASH_HERE"
 subdir = "aptos-move/framework/supra-framework"
 
-# DEVELOPMENT — live branch, may break
+# DEVELOPMENT - live branch, may break
 [dependencies.SupraFramework]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
 rev = "dev"
@@ -36,29 +36,29 @@ or run `git log --oneline -20` inside the Supra CLI container after pulling the 
 
 ---
 
-## ⚠️ CRITICAL: Always Use supra_framework
+## -- CRITICAL: Always Use supra_framework
 
 ```move
-// WRONG — will not compile on Supra
+// WRONG - will not compile on Supra
 use aptos_framework::account;
 use aptos_framework::coin;
 
-// CORRECT — always use supra_framework
+// CORRECT - always use supra_framework
 use supra_framework::account;
 use supra_framework::coin;
 ```
 
-## ⚠️ CRITICAL: aptos_std Exception — Do NOT Rename
+## -- CRITICAL: aptos_std Exception - Do NOT Rename
 
-`aptos_std` types (`SmartTable`, `Table`, `type_info`, etc.) **keep their `aptos_std::` prefix on Supra**. Do not change these to `supra_std::` or `supra_framework::` — those paths do not exist and will fail to compile.
+`aptos_std` types (`SmartTable`, `Table`, `type_info`, etc.) **keep their `aptos_std::` prefix on Supra**. Do not change these to `supra_std::` or `supra_framework::` - those paths do not exist and will fail to compile.
 
 ```move
-// CORRECT — keep aptos_std for these
+// CORRECT - keep aptos_std for these
 use aptos_std::smart_table::{Self, SmartTable};
 use aptos_std::table::{Self, Table};
 use aptos_std::type_info;
 
-// WRONG — do not rename aptos_std
+// WRONG - do not rename aptos_std
 use supra_std::smart_table::SmartTable;       // compile error
 use supra_framework::smart_table::SmartTable; // compile error
 ```
@@ -72,7 +72,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 - Version: 2.2.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
-- Framework: supra_framework (pin rev for production — see warning above)
+- Framework: supra_framework (pin rev for production - see warning above)
 
 ---
 
@@ -85,19 +85,19 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 ### Install Supra CLI
 ```bash
 # Pull and start the container
-# ⚠️ Verify this URL is the current canonical install source before running:
-# https://docs.supra.com — the compose.yaml may move to Entropy-Foundation org
+# -- Verify this URL is the current canonical install source before running:
+# https://docs.supra.com - the compose.yaml may move to Entropy-Foundation org
 cd Documents
 curl https://raw.githubusercontent.com/supra-labs/supra-dev-hub/refs/heads/main/Scripts/cli/compose.yaml | docker compose -f - up -d
 
-# Enter the container shell — ALL supra CLI commands must run from here
+# Enter the container shell - ALL supra CLI commands must run from here
 docker exec -it supra_cli /bin/bash
 
 # Verify
 supra --help
 ```
 
-> ⚠️ **Important:** All `supra` CLI commands (compile, publish, run, etc.) only work **inside the Docker container**. Scripts like `deploy.sh` must be run from within the container shell, not from your host terminal.
+> -- **Important:** All `supra` CLI commands (compile, publish, run, etc.) only work **inside the Docker container**. Scripts like `deploy.sh` must be run from within the container shell, not from your host terminal.
 
 ---
 
@@ -116,14 +116,14 @@ my_module = "YOUR-SUPRA-ADDRESS-HERE"
 
 [dependencies.SupraFramework]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
-rev = "dev"   # ⚠️ pin to a commit hash for production
+rev = "dev"   # -- pin to a commit hash for production
 subdir = "aptos-move/framework/supra-framework"
 
 # Required for Digital Asset NFTs (aptos_token_objects::collection / token)
 [dependencies.AptosTokenObjects]
 git = "https://github.com/Entropy-Foundation/aptos-core.git"
 subdir = "aptos-move/framework/aptos-token-objects"
-rev = "dev"   # ⚠️ pin to a commit hash for production
+rev = "dev"   # -- pin to a commit hash for production
 
 [dev-dependencies]
 ```
@@ -147,12 +147,12 @@ rev = "master"
 
 ## SECTION: KEY CLI COMMANDS
 
-> **Account activation:** An account does not exist on-chain until it receives funds. Always run `fund-with-faucet` before trying to publish or call contracts — otherwise you'll get an "account not found" error. The faucet call both creates and funds the account in one step.
+> **Account activation:** An account does not exist on-chain until it receives funds. Always run `fund-with-faucet` before trying to publish or call contracts - otherwise you'll get an "account not found" error. The faucet call both creates and funds the account in one step.
 
 > **`--profile` flag:** The Supra CLI needs to know which account is signing each transaction. Pass `--profile <name>` to any `publish`, `run`, or `view` command that requires a signer. If you omit it, the CLI uses whichever profile is currently active.
 
 ```bash
-# ── Setup ───────────────────────────────────────────────────────
+# -- Setup -------------------------------------------------------
 
 # Create a new Move package
 supra move tool init --package-dir /supra/move_workspace/myProject --name myProject
@@ -163,7 +163,7 @@ supra move tool compile --package-dir /supra/move_workspace/myProject
 # Run tests
 supra move tool test --package-dir /supra/move_workspace/myProject
 
-# ── Account management ─────────────────────────────────────────
+# -- Account management -----------------------------------------
 
 # Generate key / account (creates the profile)
 supra key generate --key-type ed25519 --profile myAccount
@@ -174,7 +174,7 @@ supra move account fund-with-faucet --profile myAccount --rpc-url https://rpc-te
 # List profiles
 supra profile list
 
-# ── Deploy ─────────────────────────────────────────────────────
+# -- Deploy -----------------------------------------------------
 
 # Publish to testnet (--profile specifies the signer)
 supra move tool publish \
@@ -189,7 +189,7 @@ supra move tool publish \
   --rpc-url https://rpc-testnet.supra.com \
   --upgrade-policy compatible
 
-# ── Interact ───────────────────────────────────────────────────
+# -- Interact ---------------------------------------------------
 
 # Call an entry function
 supra move tool run \
@@ -204,7 +204,7 @@ supra move tool run \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 
-# Read a view function (no --profile needed — read-only)
+# Read a view function (no --profile needed - read-only)
 supra move tool view \
   --function-id 'my_module::counter::get_value' \
   --args address:0xcafe \
@@ -214,6 +214,53 @@ supra move tool view \
 ---
 
 ## SECTION: MOVE LANGUAGE FUNDAMENTALS
+
+### Common Imports
+
+```move
+use std::signer;                           // signer::address_of
+use std::string::{Self, String};           // string::utf8(b"..."), String type
+use std::vector;                           // vector::push_back, borrow, length
+use std::option::{Self, Option};           // option::none(), option::some(v)
+use supra_framework::event;               // event::emit
+use supra_framework::timestamp;           // timestamp::now_seconds
+use supra_framework::object::{Self, Object}; // DA NFTs
+use aptos_std::table::{Self, Table};      // O(1) key-value storage
+use aptos_std::smart_table::{Self, SmartTable}; // iterable key-value storage
+```
+
+> **`string::utf8` requires an import.** Always add `use std::string::{Self, String}` when using `string::utf8(b"...")`. Fully-qualified paths (`std::string::utf8(...)`) compile but are inconsistent - use the import form.
+
+---
+
+### Comments
+
+Move uses `//` for all comments. `//` doc comments are **not supported** - they will cause a compile error.
+
+```move
+// This is a valid comment
+// Multi-line: just use multiple // lines
+
+// WRONG - do not use:
+// This causes a compile error on Supra Move
+```
+
+---
+
+### ASCII-only source files
+
+Move only permits ASCII printable characters, tabs, and newlines. Non-ASCII characters - even in comments and doc strings - cause a compile error:
+
+```
+error[E01001]: invalid character
+  | // My module - does X   - em dash kills the build
+  |                ^ Invalid character '-'
+```
+
+Never use: `-` `-` `'` `'` `"` `"` or any other Unicode punctuation.
+Use instead: `-` or `--` for dashes, `'` for apostrophes, `"` for quotes.
+
+---
 
 ### Module Structure
 
@@ -270,16 +317,16 @@ let MyData { value: _ } = move_from<MyData>(address);
 ### Function Types
 
 ```move
-// Entry — callable from transactions
+// Entry - callable from transactions
 public entry fun my_function(account: &signer, value: u64) { ... }
 
-// Public — callable from other modules
+// Public - callable from other modules
 public fun helper(): u64 { 42 }
 
-// Private — internal only
+// Private - internal only
 fun internal() { ... }
 
-// View — read-only, queryable off-chain without a transaction
+// View - read-only, queryable off-chain without a transaction
 #[view]
 public fun get_value(addr: address): u64 acquires MyData {
     borrow_global<MyData>(addr).value
@@ -302,6 +349,17 @@ let addr: address = @0xcafe;
 let v: vector<u64> = vector::empty();
 ```
 
+**Casting - `as` must be inside its own parentheses:**
+```move
+// WRONG - compiler error: unexpected 'as'
+let x = (rand % count) as u64;
+
+// CORRECT - as is the outermost operator inside the parens
+let x = ((rand % count) as u64);
+let y = (my_u64 as u128);
+let z = (vector::length(&v) as u256);
+```
+
 ### Events
 
 ```move
@@ -320,7 +378,7 @@ event::emit(MyEvent { value: 100, user: @0xcafe });
 
 ## SECTION: DATA STRUCTURES
 
-### vector — Use for Small Ordered Lists Only
+### vector - Use for Small Ordered Lists Only
 
 ```move
 use std::vector;
@@ -336,7 +394,7 @@ vector::pop_back(&mut v);              // removes last
 
 **Warning:** vector lookup is O(n). For collections > ~100 entries, use SmartTable.
 
-### SmartTable — Scalable Key-Value Storage (Recommended)
+### SmartTable - Scalable Key-Value Storage (Recommended)
 
 ```move
 use aptos_std::smart_table::{Self, SmartTable};
@@ -368,7 +426,7 @@ smart_table::remove(&mut store.data, key);
 smart_table::drop(store.data);
 ```
 
-### Table — Simple Key-Value (use when you need Table-specific semantics)
+### Table - Simple Key-Value (use when you need Table-specific semantics)
 
 ```move
 use aptos_std::table::{Self, Table};
@@ -449,7 +507,7 @@ public entry fun admin_action(caller: &signer) acquires Config {
 ### Error Handling
 
 ```move
-// Named constants — never use raw integers in assert!
+// Named constants - never use raw integers in assert!
 const E_NOT_ADMIN: u64 = 1;
 const E_ALREADY_EXISTS: u64 = 2;
 const E_NOT_FOUND: u64 = 3;
@@ -459,10 +517,16 @@ const E_INSUFFICIENT_BALANCE: u64 = 5;
 assert!(condition, E_NOT_ADMIN);
 ```
 
+Two rules to follow with error codes:
+
+**1. Don't define constants you don't use.** Unused error codes are dead code - define them only when you have a matching `assert!`.
+
+**2. Don't reuse codes for different meanings.** Each distinct failure condition needs its own code. For example, a "game not yet over" state and a "wrong turn" state are different failures - reusing `E_NOT_YOUR_TURN` for both will make debugging impossible. Create a new `E_GAME_NOT_OVER` instead.
+
 ### auto init_module (runs on first publish)
 
 ```move
-/// Called automatically when the module is published — no transaction needed.
+// Called automatically when the module is published - no transaction needed.
 fun init_module(deployer: &signer) {
     move_to(deployer, Config {
         admin: signer::address_of(deployer),
@@ -473,7 +537,7 @@ fun init_module(deployer: &signer) {
 
 ### Resource Accounts (SignerCapability)
 
-Resource accounts let contracts sign transactions autonomously — essential for vaults, pools, DAOs.
+Resource accounts let contracts sign transactions autonomously - essential for vaults, pools, DAOs.
 
 ```move
 use supra_framework::account::{Self, SignerCapability};
@@ -485,14 +549,14 @@ struct VaultConfig has key {
 }
 
 public entry fun initialize(admin: &signer, seed: vector<u8>) {
-    // Create resource account — address is derived from admin + seed
+    // Create resource account - address is derived from admin + seed
     let (resource_signer, resource_cap) = account::create_resource_account(admin, seed);
     let resource_addr = signer::address_of(&resource_signer);
 
     // Set up resource account (e.g. register coins)
     coin::register<SupraCoin>(&resource_signer);
 
-    // Store capability — never expose it publicly
+    // Store capability - never expose it publicly
     move_to(admin, VaultConfig {
         admin: signer::address_of(admin),
         resource_cap,
@@ -504,7 +568,7 @@ public entry fun vault_withdraw(admin: &signer, to: address, amount: u64) acquir
     let config = borrow_global<VaultConfig>(signer::address_of(admin));
     assert!(config.admin == signer::address_of(admin), E_NOT_ADMIN);
 
-    // Produce vault signer on-demand — no human key needed
+    // Produce vault signer on-demand - no human key needed
     let vault_signer = account::create_signer_with_capability(&config.resource_cap);
     coin::transfer<SupraCoin>(&vault_signer, to, amount);
 }
@@ -549,13 +613,13 @@ See `scripts/token_contract.move` for the full example.
 
 ## SECTION: NATIVE FEATURES
 
-### dVRF 3.0 — On-Chain Verifiable Randomness
+### dVRF 3.0 - On-Chain Verifiable Randomness
 
-dVRF uses a **request → callback** pattern. You call `rng_request`, Supra calls your `distribute` function back with the verified random numbers.
+dVRF uses a **request - callback** pattern. You call `rng_request_v2`, Supra calls your `distribute` function back with the verified random numbers.
 
-**VRF 3.0 access control** uses a `permit_cap<phantom T>` mechanism — two whitelisting steps required before your contract can request randomness:
-1. Whitelist your wallet address (self-whitelist)
-2. Whitelist your contract module (module-whitelist, specifying `"address::module_name"`)
+**VRF 3.0 access control** uses a `SupraVRFPermit<phantom T>` from `supra_addr::deposit` - two setup steps required before your contract can request randomness:
+1. Whitelist your wallet address via `deposit::whitelist_client_address` (sets max transaction fee)
+2. Fund your deposit account via `deposit::deposit_fund_v2`
 
 See `references/native_features.md` for the full whitelisting walkthrough and CLI commands.
 
@@ -563,29 +627,30 @@ See `references/native_features.md` for the full whitelisting walkthrough and CL
 module my_module::lottery {
     use aptos_std::table;
     use supra_addr::supra_vrf;
+    use supra_addr::deposit::{Self, SupraVRFPermit};
     use std::string::{Self, String};
     use supra_framework::event;
     use std::signer;
 
     // Each module that calls rng_request must define its own permit struct.
-    // The type parameter in permit_cap<T> ties access control to this module.
+    // The type parameter in SupraVRFPermit<T> ties access control to this module.
     struct LotteryPermit {}
 
     struct State has key {
         random_numbers: table::Table<u64, vector<u256>>,
-        // permit_cap is acquired once during init and stored here
-        permit_cap: supra_vrf::permit_cap<LotteryPermit>,
+        // SupraVRFPermit is acquired once during init and stored here
+        permit_cap: SupraVRFPermit<LotteryPermit>,
     }
 
-    // Called once at deployment — wallet + module must be whitelisted first
-    // Exact registration function: verify against v3 interface source
+    // Called once at deployment - wallet + module must be whitelisted first
     fun init_module(sender: &signer) {
-        let cap = supra_vrf::create_permit_cap<LotteryPermit>(sender);
+        let cap = deposit::init_vrf_module<LotteryPermit>(sender);
+        deposit::enable_module<LotteryPermit>(sender);
         move_to(sender, State { random_numbers: table::new(), permit_cap: cap });
     }
 
     // Step 1: Request randomness
-    // VRF 3.0: no sender/callback_address/callback_module — permit_cap provides
+    // VRF 3.0: no sender/callback_address/callback_module - SupraVRFPermit provides
     // module identity; Supra derives the callback module from the type parameter.
     public entry fun rng_request(
         rng_count: u8,         // how many numbers (max 255)
@@ -593,7 +658,7 @@ module my_module::lottery {
         num_confirmations: u64,
     ) acquires State {
         let state = borrow_global_mut<State>(@my_module);
-        let nonce = supra_vrf::rng_request<LotteryPermit>(
+        let nonce = supra_vrf::rng_request_v2<LotteryPermit>(
             &state.permit_cap,
             string::utf8(b"distribute"),  // callback function name in this module
             rng_count, client_seed, num_confirmations,
@@ -601,7 +666,7 @@ module my_module::lottery {
         table::add(&mut state.random_numbers, nonce, vector[]);
     }
 
-    // Step 2: Supra calls this automatically — signature must match exactly
+    // Step 2: Supra calls this automatically - signature must match exactly
     public entry fun distribute(
         nonce: u64,
         message: vector<u8>,
@@ -631,9 +696,9 @@ supra move tool run \
 
 Docs: https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
-### Oracles — Real-Time Price Feeds
+### Oracles - Real-Time Price Feeds
 
-> **Move.toml note:** The oracle module is deployed on-chain by Supra — it is NOT a git dependency. You must add the oracle contract address to your `[addresses]` section and confirm the module name from the docs. Example:
+> **Move.toml note:** The oracle module is deployed on-chain by Supra - it is NOT a git dependency. You must add the oracle contract address to your `[addresses]` section and confirm the module name from the docs. Example:
 > ```toml
 > [addresses]
 > my_module    = "YOUR-ADDRESS"
@@ -645,7 +710,7 @@ module my_module::price_reader {
     use supra_oracle::oracle;
 
     // Returns (price: u128, decimal: u8, timestamp: u64)
-    // Pair index 0 = BTC/USDT — verify indices at oracle docs
+    // Pair index 0 = BTC/USDT - verify indices at oracle docs
     #[view]
     public fun get_btc_price(): u128 {
         let (price, _decimal, _timestamp) = oracle::get_price(0);
@@ -665,9 +730,9 @@ module my_module::price_reader {
 
 Pair indices: https://docs.supra.com/oracles/data-feeds/push-oracle
 
-### Automation — Schedule Contract Calls
+### Automation - Schedule Contract Calls
 
-Write a condition-aware entry function, then register it with Supra Automation. Validators execute it automatically — no bots or keepers needed.
+Write a condition-aware entry function, then register it with Supra Automation. Validators execute it automatically - no bots or keepers needed.
 
 ```move
 module my_module::auto_tasks {
@@ -675,8 +740,8 @@ module my_module::auto_tasks {
     use supra_framework::coin;
     use std::signer;
 
-    /// Auto top-up: refill wallet when balance drops below threshold.
-    /// Condition check is INSIDE the function — exits cleanly if not triggered.
+    // Auto top-up: refill wallet when balance drops below threshold.
+    // Condition check is INSIDE the function - exits cleanly if not triggered.
     public entry fun auto_top_up(
         source: &signer,
         user: address,
@@ -687,7 +752,7 @@ module my_module::auto_tasks {
         if (current < min_balance) {
             coin::transfer<SupraCoin>(source, user, top_up_amount);
         }
-        // No abort if condition is false — exits cleanly
+        // No abort if condition is false - exits cleanly
     }
 }
 ```
@@ -727,17 +792,17 @@ Docs: https://docs.supra.com/automation/getting-started
 
 See `references/sdk_guide.md` for complete SDK reference including multi-agent transactions, simulation, and Python async patterns.
 
-### TypeScript — Install
+### TypeScript - Install
 ```bash
 npm install supra-l1-sdk           # latest (currently 5.0.2)
 npm install supra-l1-sdk@5.0.2    # pin for production
 ```
 
-> ⚠️ Version `@2.0.0` does not exist on npm — published versions start at `3.0.0`.
+> -- Version `@2.0.0` does not exist on npm - published versions start at `3.0.0`.
 
-### TypeScript — State-Modifying Contract Call
+### TypeScript - State-Modifying Contract Call
 
-> ⚠️ There is **no `invokeContractFunction`** method. The real pattern is `createSerializedRawTxObject` → `sendTxUsingSerializedRawTransaction`.
+> -- There is **no `invokeContractFunction`** method. The real pattern is `createSerializedRawTxObject` - `sendTxUsingSerializedRawTransaction`.
 
 ```typescript
 import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
@@ -756,7 +821,7 @@ const rawTx = await client.createSerializedRawTxObject(
   "0xYOUR_CONTRACT_ADDRESS",  // module address
   "registry",                 // module name
   "register",                 // function name
-  [],                         // TypeTag[] — empty if no generic params
+  [],                         // TypeTag[] - empty if no generic params
   [
     TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(), // address
     BCS.bcsSerializeStr("Alice"),                                     // string/vector<u8>
@@ -767,7 +832,7 @@ const response = await client.sendTxUsingSerializedRawTransaction(rawTx, account
 console.log("TX hash:", response.txHash);
 ```
 
-### TypeScript — View Function Call
+### TypeScript - View Function Call
 
 > Use `invokeViewMethod` (not `invokeContractFunction`) for read-only calls.
 
@@ -881,7 +946,7 @@ See `references/patterns.md` for full upgrade code examples.
 | Mainnet | https://rpc-mainnet.supra.com |
 
 - Explorer: https://suprascan.io
-- Wallet: StarKey — https://starkey.app
+- Wallet: StarKey - https://starkey.app
 - Supra Docs: https://docs.supra.com
 - Framework Source: https://github.com/Entropy-Foundation/aptos-core/tree/dev/aptos-move/framework/supra-framework
 - TypeScript SDK: https://github.com/Entropy-Foundation/supra-l1-sdk
@@ -894,12 +959,12 @@ See `references/patterns.md` for full upgrade code examples.
 |---|---|
 | `references/core_topics.md` | Move fundamentals deep-dive |
 | `references/supra_vs_aptos.md` | Migration cheatsheet from Aptos |
-| `references/native_features.md` | dVRF, Oracles, Automation — full code |
+| `references/native_features.md` | dVRF, Oracles, Automation - full code |
 | `references/sdk_guide.md` | TypeScript + Python SDK with BCS encoding |
 | `references/resource_accounts.md` | SignerCapability, vault, DAO patterns |
 | `references/patterns.md` | SmartTable, upgrade, multi-signer, gas |
 | `references/object_model.md` | Supra object model |
-| `scripts/example_contract.move` | Counter — basic module template |
+| `scripts/example_contract.move` | Counter - basic module template |
 | `scripts/token_contract.move` | Custom coin (mint/burn/transfer) |
 | `scripts/events_example.move` | Events + vector registry pattern |
 | `scripts/advanced_examples.move` | Admin, pausable, NFT (Table), timelock |

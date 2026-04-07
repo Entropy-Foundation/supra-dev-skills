@@ -1,10 +1,10 @@
-/// Supra Move — Events & Data Storage Patterns
-///
-/// Demonstrates:
-/// - Emitting events with event::emit
-/// - Using vectors to store collections
-/// - Reading resource data with borrow_global
-/// - Common storage patterns
+// Supra Move - Events & Data Storage Patterns
+//
+// Demonstrates:
+// - Emitting events with event::emit
+// - Using vectors to store collections
+// - Reading resource data with borrow_global
+// - Common storage patterns
 
 module my_module::registry {
     use supra_framework::event;
@@ -20,9 +20,9 @@ module my_module::registry {
 
     // ============================================================
     // On-chain Data
-    // ⚠️ vector is used here to demonstrate events and basic storage patterns.
+    // -- vector is used here to demonstrate events and basic storage patterns.
     // For registries expected to exceed ~100 members, use SmartTable instead:
-    //   members: SmartTable<address, String>  → O(1) lookup, gas stays flat
+    //   members: SmartTable<address, String>  - O(1) lookup, gas stays flat
     // See references/patterns.md Section 1 for the SmartTable pattern.
     // ============================================================
     struct Registry has key {
@@ -50,7 +50,7 @@ module my_module::registry {
     // Entry Functions
     // ============================================================
 
-    /// Create the registry
+    // Create the registry
     public entry fun create_registry(admin: &signer) {
         let admin_addr = signer::address_of(admin);
         assert!(!exists<Registry>(admin_addr), E_ALREADY_REGISTERED);
@@ -64,7 +64,7 @@ module my_module::registry {
         event::emit(RegistryCreated { creator: admin_addr });
     }
 
-    /// Register a new member
+    // Register a new member
     public entry fun register(
         admin: &signer,
         new_member: address,

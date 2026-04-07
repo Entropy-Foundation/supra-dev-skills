@@ -1,12 +1,12 @@
-/// Supra Move — Testing Patterns
-///
-/// Demonstrates:
-/// - Unit test setup with #[test]
-/// - Using test accounts with #[test(account = @0xcafe)]
-/// - Expected failure tests with #[expected_failure]
-/// - Testing entry functions end-to-end
-///
-/// Run tests: supra move tool test --package-dir /supra/move_workspace/myProject
+// Supra Move - Testing Patterns
+//
+// Demonstrates:
+// - Unit test setup with #[test]
+// - Using test accounts with #[test(account = @0xcafe)]
+// - Expected failure tests with #[expected_failure]
+// - Testing entry functions end-to-end
+//
+// Run tests: supra move tool test --package-dir /supra/move_workspace/myProject
 
 #[test_only]
 module my_module::counter_tests {
@@ -77,7 +77,7 @@ module my_module::counter_tests {
     }
 
     // ============================================================
-    // Test: Expected failure — double initialization
+    // Test: Expected failure - double initialization
     // ============================================================
     #[test(admin = @0xCAFE)]
     #[expected_failure(abort_code = 2)] // E_ALREADY_INITIALIZED = 2
@@ -89,13 +89,13 @@ module my_module::counter_tests {
     }
 
     // ============================================================
-    // Test: Expected failure — increment without init
+    // Test: Expected failure - increment without init
     // ============================================================
     #[test(user = @0xBEEF)]
     #[expected_failure(abort_code = 1)] // E_NOT_INITIALIZED = 1
     public fun test_increment_without_init_fails(user: signer) {
         account::create_account_for_test(std::signer::address_of(&user));
-        counter::increment(&user); // Should abort — not initialized
+        counter::increment(&user); // Should abort - not initialized
     }
 
     // ============================================================

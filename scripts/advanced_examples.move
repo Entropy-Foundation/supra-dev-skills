@@ -1,26 +1,26 @@
-/// Supra Move — Advanced Patterns
-///
-/// Demonstrates:
-/// - Admin + Pausable contracts (with assert_not_paused enforced)
-/// - NFT / Digital Asset collection using Table (O(1) lookup — not vector)
-/// - Timelock pattern with correct error code
-/// - Access control with named error constants
+// Supra Move - Advanced Patterns
+//
+// Demonstrates:
+// - Admin + Pausable contracts (with assert_not_paused enforced)
+// - NFT / Digital Asset collection using Table (O(1) lookup - not vector)
+// - Timelock pattern with correct error code
+// - Access control with named error constants
 
-/// Move.toml requirements for this module:
-///   [addresses]
-///   aptos_token_objects = "0x4"
-///
-///   [dependencies.SupraFramework]
-///   git = "https://github.com/Entropy-Foundation/aptos-core.git"
-///   subdir = "aptos-move/framework/supra-framework"
-///   rev = "dev"   # pin to a commit hash for production
-///
-///   [dependencies.AptosTokenObjects]
-///   git = "https://github.com/Entropy-Foundation/aptos-core.git"
-///   subdir = "aptos-move/framework/aptos-token-objects"
-///   rev = "dev"   # pin to a commit hash for production
-///
-/// Verify the exact git URL and rev for your target network against the official Supra docs.
+// Move.toml requirements for this module:
+//   [addresses]
+//   aptos_token_objects = "0x4"
+//
+//   [dependencies.SupraFramework]
+//   git = "https://github.com/Entropy-Foundation/aptos-core.git"
+//   subdir = "aptos-move/framework/supra-framework"
+//   rev = "dev"   # pin to a commit hash for production
+//
+//   [dependencies.AptosTokenObjects]
+//   git = "https://github.com/Entropy-Foundation/aptos-core.git"
+//   subdir = "aptos-move/framework/aptos-token-objects"
+//   rev = "dev"   # pin to a commit hash for production
+//
+// Verify the exact git URL and rev for your target network against the official Supra docs.
 
 module my_module::advanced {
     use supra_framework::event;
@@ -85,8 +85,8 @@ module my_module::advanced {
         event::emit(ContractUnpaused { by: addr });
     }
 
-    /// Internal guard — call this inside any entry function that should
-    /// be blocked while paused. Pass the admin's address explicitly.
+    // Internal guard - call this inside any entry function that should
+    // be blocked while paused. Pass the admin's address explicitly.
     fun assert_not_paused(admin_addr: address) acquires AdminConfig {
         let config = borrow_global<AdminConfig>(admin_addr);
         assert!(!config.paused, E_PAUSED);
@@ -95,14 +95,14 @@ module my_module::advanced {
     // ============================================================
     // Pattern 2: Digital Asset NFT (Aptos Token Objects / DA standard)
     //
-    // Uses aptos_token_objects (0x4) — the correct on-chain NFT standard.
+    // Uses aptos_token_objects (0x4) - the correct on-chain NFT standard.
     // Each token is a real on-chain Object with a unique address.
     // Refs (MutatorRef, BurnRef) must be captured at creation time because
     // ConstructorRef expires at the end of the transaction.
     //
     // Collection: created once per creator address.
     // Tokens:     numbered ("Name #1", "Name #2", ...), fully burnable.
-    // Transfer:   owner-signed via object::transfer — no admin involvement.
+    // Transfer:   owner-signed via object::transfer - no admin involvement.
     // ============================================================
 
     // Change these for your project
@@ -110,8 +110,8 @@ module my_module::advanced {
     const COLLECTION_DESC: vector<u8> = b"A demonstration NFT collection on Supra";
     const COLLECTION_URI:  vector<u8> = b"https://example.com/collection";
 
-    /// Refs stored on each token object.
-    /// #[resource_group_member] is required for structs stored on Objects.
+    // Refs stored on each token object.
+    // #[resource_group_member] is required for structs stored on Objects.
     #[resource_group_member(group = supra_framework::object::ObjectGroup)]
     struct NFTToken has key {
         mutator_ref: token::MutatorRef,
@@ -132,8 +132,8 @@ module my_module::advanced {
         to: address,
     }
 
-    /// Create the on-chain collection. Call once — collection names are
-    /// unique per creator address.
+    // Create the on-chain collection. Call once - collection names are
+    // unique per creator address.
     public entry fun create_collection(creator: &signer) {
         collection::create_unlimited_collection(
             creator,
@@ -144,9 +144,9 @@ module my_module::advanced {
         );
     }
 
-    /// Mint a token into the collection and send it to recipient.
-    /// Produces a numbered token: "<name> #1", "<name> #2", etc.
-    /// Numbered tokens (unlike named tokens) can be fully destroyed via burn.
+    // Mint a token into the collection and send it to recipient.
+    // Produces a numbered token: "<name> #1", "<name> #2", etc.
+    // Numbered tokens (unlike named tokens) can be fully destroyed via burn.
     public entry fun mint_nft(
         creator: &signer,
         recipient: address,
@@ -159,7 +159,7 @@ module my_module::advanced {
             string::utf8(COLLECTION_NAME),
             string::utf8(description),
             string::utf8(name),
-            string::utf8(b""),   // name suffix — empty for clean display
+            string::utf8(b""),   // name suffix - empty for clean display
             option::none(),      // royalty
             string::utf8(uri),
         );
@@ -181,8 +181,8 @@ module my_module::advanced {
         event::emit(NFTMinted { token_address, name: string::utf8(name), recipient });
     }
 
-    /// Transfer an NFT — called by the current owner, not the creator.
-    /// object::transfer aborts automatically if signer is not the owner.
+    // Transfer an NFT - called by the current owner, not the creator.
+    // object::transfer aborts automatically if signer is not the owner.
     public entry fun transfer_nft(
         owner: &signer,
         nft: Object<NFTToken>,
@@ -197,7 +197,7 @@ module my_module::advanced {
         });
     }
 
-    /// Burn (permanently destroy) an NFT. Must be called by the current owner.
+    // Burn (permanently destroy) an NFT. Must be called by the current owner.
     public entry fun burn_nft(
         owner: &signer,
         nft: Object<NFTToken>,
@@ -235,7 +235,7 @@ module my_module::advanced {
         let action = borrow_global_mut<TimelockAction>(addr);
 
         assert!(!action.executed, E_ALREADY_EXECUTED);
-        // E_TIMELOCK_NOT_READY — semantically correct; E_PAUSED would be wrong here
+        // E_TIMELOCK_NOT_READY - semantically correct; E_PAUSED would be wrong here
         assert!(timestamp::now_seconds() >= action.unlock_time, E_TIMELOCK_NOT_READY);
 
         action.executed = true;

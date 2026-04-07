@@ -1,12 +1,12 @@
-/// Supra Move — Simple Token / Coin Example
-///
-/// Demonstrates:
-/// - Creating a custom coin on Supra
-/// - Minting, transferring, and burning tokens
-/// - Using supra_framework::coin module
-///
-/// Note: For FA (Fungible Asset) standard on Mainnet,
-/// use coin_wrapper: https://github.com/Entropy-Foundation/aptos-core/blob/dev/aptos-move/move-examples/swap/sources/coin_wrapper.move
+// Supra Move - Simple Token / Coin Example
+//
+// Demonstrates:
+// - Creating a custom coin on Supra
+// - Minting, transferring, and burning tokens
+// - Using supra_framework::coin module
+//
+// Note: For FA (Fungible Asset) standard on Mainnet,
+// use coin_wrapper: https://github.com/Entropy-Foundation/aptos-core/blob/dev/aptos-move/move-examples/swap/sources/coin_wrapper.move
 
 module my_module::my_token {
     use supra_framework::coin::{Self, BurnCapability, FreezeCapability, MintCapability};
@@ -48,8 +48,8 @@ module my_module::my_token {
         });
     }
 
-    /// Mint tokens to a recipient.
-    /// ⚠️ recipient must have called register() first — coin::deposit aborts otherwise.
+    // Mint tokens to a recipient.
+    // -- recipient must have called register() first - coin::deposit aborts otherwise.
     public entry fun mint(
         admin: &signer,
         recipient: address,
@@ -61,8 +61,8 @@ module my_module::my_token {
         coin::deposit<MyToken>(recipient, coins);
     }
 
-    /// Burn tokens from an account.
-    /// The admin holds the burn capability; the from account's coins are destroyed.
+    // Burn tokens from an account.
+    // The admin holds the burn capability; the from account's coins are destroyed.
     public entry fun burn(
         admin: &signer,
         from: address,
@@ -72,7 +72,7 @@ module my_module::my_token {
         coin::burn_from<MyToken>(from, amount, &caps.burn_cap);
     }
 
-    /// Transfer tokens between accounts
+    // Transfer tokens between accounts
     public entry fun transfer(
         sender: &signer,
         recipient: address,
@@ -81,7 +81,7 @@ module my_module::my_token {
         coin::transfer<MyToken>(sender, recipient, amount);
     }
 
-    /// Register to receive this token (must call before receiving)
+    // Register to receive this token (must call before receiving)
     public entry fun register(account: &signer) {
         coin::register<MyToken>(account);
     }

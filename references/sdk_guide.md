@@ -10,7 +10,7 @@ npm install supra-l1-sdk           # latest (currently 5.0.2)
 npm install supra-l1-sdk@5.0.2    # pin to known-good version for production
 ```
 
-> ⚠️ Version `2.0.0` does not exist on npm. The published history starts at `3.0.0`. Always check `npm show supra-l1-sdk version` for the current latest.
+> -- Version `2.0.0` does not exist on npm. The published history starts at `3.0.0`. Always check `npm show supra-l1-sdk version` for the current latest.
 
 ### Import
 ```typescript
@@ -52,7 +52,7 @@ console.log("TX hash:", response.txHash);
 
 ## Calling Contract Functions (State-Modifying)
 
-> ⚠️ There is **no `invokeContractFunction` method** in the SDK. State-modifying calls use a two-step pattern: `createSerializedRawTxObject` → `sendTxUsingSerializedRawTransaction`.
+> -- There is **no `invokeContractFunction` method** in the SDK. State-modifying calls use a two-step pattern: `createSerializedRawTxObject` - `sendTxUsingSerializedRawTransaction`.
 
 ```typescript
 import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
@@ -72,7 +72,7 @@ const serializedRawTx = await client.createSerializedRawTxObject(
   "0xYOUR_CONTRACT_ADDRESS",           // module address
   "registry",                          // module name
   "register",                          // function name
-  [],                                  // TypeTag[] — empty if no generic type params
+  [],                                  // TypeTag[] - empty if no generic type params
   [
     // address argument
     TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(),
@@ -106,7 +106,7 @@ console.log("TX hash:", response.txHash);
 
 ### With Generic Type Arguments
 
-> **Framework address:** `supra_framework` is deployed at address `0x1` on Supra (same as Aptos). So `0x1::supra_coin::SupraCoin` is the canonical TypeTag path for SupraCoin. Use this literal address — do not use a named address variable here.
+> **Framework address:** `supra_framework` is deployed at address `0x1` on Supra (same as Aptos). So `0x1::supra_coin::SupraCoin` is the canonical TypeTag path for SupraCoin. Use this literal address - do not use a named address variable here.
 
 ```typescript
 // public entry fun transfer<CoinType>(sender, recipient: address, amount: u64)
@@ -121,7 +121,7 @@ const serializedRawTx = await client.createSerializedRawTxObject(
   "0x1",
   "coin",
   "transfer",
-  [coinTypeTag],           // TypeTag[] — the generic coin type
+  [coinTypeTag],           // TypeTag[] - the generic coin type
   [
     TxnBuilderTypes.AccountAddress.fromHex(recipientAddress).toUint8Array(),
     BCS.bcsSerializeUint64(BigInt(1_000_000)),
@@ -148,7 +148,7 @@ const result = await client.invokeViewMethod(
     TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR").toUint8Array(),
   ]
 );
-// result is Uint8Array[] — decode as needed
+// result is Uint8Array[] - decode as needed
 console.log("Result:", result);
 ```
 
@@ -157,7 +157,7 @@ console.log("Result:", result);
 ## Simulate Before Sending
 
 ```typescript
-// Use simulateTxUsingSerializedRawTransaction — takes the same serialized bytes
+// Use simulateTxUsingSerializedRawTransaction - takes the same serialized bytes
 // as sendTxUsingSerializedRawTransaction, so no extra step is needed.
 const accountInfo  = await client.getAccountInfo(account.address());
 const serializedRawTx = await client.createSerializedRawTxObject(
@@ -171,7 +171,7 @@ const simulation = await client.simulateTxUsingSerializedRawTransaction(
   serializedRawTx,
   account
 );
-// simulation is Promise<any> — gas_used field contains the estimate
+// simulation is Promise<any> - gas_used field contains the estimate
 console.log("Estimated gas:", simulation.gas_used);
 ```
 
@@ -239,7 +239,7 @@ from supra_sdk.clients.rest import SupraClient
 from supra_sdk.transactions import EntryFunction, TransactionArgument, TransactionPayload
 ```
 
-> ⚠️ The Python SDK is **async-first**. All client methods are coroutines — run them with `asyncio.run()` or `await` inside an async context. The `SupraClient` constructor itself is synchronous; everything else is async.
+> -- The Python SDK is **async-first**. All client methods are coroutines - run them with `asyncio.run()` or `await` inside an async context. The `SupraClient` constructor itself is synchronous; everything else is async.
 
 ### Basic Usage
 
@@ -341,9 +341,9 @@ Docs page: https://docs.supra.com/network/move/python-sdk
 
 Base URL (Testnet): `https://rpc-testnet.supra.com`
 
-> **API versions:** The current API is `/rpc/v3/`. Versions v1 and v2 exist but are deprecated — `/rpc/v1/` survives only for a handful of legacy transaction endpoints. Always use v3 for new integrations.
+> **API versions:** The current API is `/rpc/v3/`. Versions v1 and v2 exist but are deprecated - `/rpc/v1/` survives only for a handful of legacy transaction endpoints. Always use v3 for new integrations.
 
-### Current Endpoints (`/rpc/v3/` — use these)
+### Current Endpoints (`/rpc/v3/` - use these)
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -358,7 +358,7 @@ Base URL (Testnet): `https://rpc-testnet.supra.com`
 | POST | `/rpc/v3/transactions/simulate` | Simulate a transaction |
 | GET | `/rpc/v3/transactions/estimate_gas_price` | Current gas price |
 
-### Legacy Endpoints (v1 only — chain metadata)
+### Legacy Endpoints (v1 only - chain metadata)
 
 | Method | Endpoint | Description |
 |---|---|---|
