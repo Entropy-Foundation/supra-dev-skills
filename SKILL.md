@@ -1,7 +1,7 @@
 ---
 name: Supra Move Development
 description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
-version: 2.3.0
+version: 2.4.0
 ---
 
 # Supra Move Development Skill
@@ -36,17 +36,23 @@ This applies everywhere: file headers, function docs, inline comments. Never use
 
 ---
 
-### RULE 2 - ASCII only. No Unicode in source files.
+### RULE 2 - ASCII only. No Unicode anywhere in source files.
 
-Move only allows ASCII characters (0x20-0x7E). Non-ASCII kills the build **even inside comments**.
+Move only allows ASCII characters (0x20-0x7E). Non-ASCII kills the build **even inside comments**. This includes emoji, symbols, and typographic punctuation.
 
 ```
 error[E01001]: invalid character
+  | // SmartTable used for O(1) lookup — gas stays flat
+  |                                    ^ Invalid character '—'
+
+error[E01001]: invalid character
+  | // ✅ Caller is whitelisted
+  |    ^^ Invalid character '✅'
 ```
 
 Characters that will always break compilation:
 
-| You might type | Unicode | Use this instead |
+| You might write | Unicode | Use this instead |
 |---|---|---|
 | `--` (em dash) | U+2014 | `--` |
 | `-` (en dash) | U+2013 | `-` |
@@ -55,8 +61,9 @@ Characters that will always break compilation:
 | `->` (arrow) | U+2192 | `->` |
 | `'` `'` (curly quotes) | U+2018/19 | `'` |
 | `"` `"` (curly double quotes) | U+201C/D | `"` |
+| `✅` `❌` `⚠️` and any emoji | various | write it out in words |
 
-Do not use Unicode separators like `----------` in comments. Use plain ASCII hyphens `----------`.
+**Do not use emoji or symbols in comments.** Write `// OK: caller is whitelisted` not `// ✅ caller is whitelisted`. Write `// WARNING:` not `// ⚠️`. No exceptions.
 
 ---
 
@@ -169,7 +176,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.3.0
+- Version: 2.4.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
 - Framework: supra_framework (pin rev for production - see warning above)
@@ -496,9 +503,32 @@ smart_table::contains(&store.data, key)
 // Remove
 smart_table::remove(&mut store.data, key);
 
+// Count entries - use the built-in, do NOT maintain a manual counter
+smart_table::length(&store.data)
+
 // Destroy (required before dropping the struct)
 smart_table::drop(store.data);
 ```
+
+**Do not store counts as separate struct fields.** `SmartTable` and `Table` expose `length()` natively. A manual `member_count: u64` field alongside a `SmartTable` is always wrong — it adds gas overhead, creates a desync bug whenever you forget to update it, and provides no benefit.
+
+```move
+// WRONG - manual counter duplicates what the table already knows
+struct Whitelist has key {
+    members: SmartTable<address, bool>,
+    member_count: u64,   // will drift out of sync; remove this
+}
+
+// CORRECT - query the table directly
+struct Whitelist has key {
+    members: SmartTable<address, bool>,
+}
+
+// Get the count anywhere you need it
+let count = smart_table::length(&whitelist.members);
+```
+
+Apply the same principle to any collection type: `vector::length(&v)`, `table::length(&t)`. Only store derived values in state when computing them on-demand would be prohibitively expensive (e.g., a running sum across unbounded history). A simple count is never that case.
 
 ### Table - Simple Key-Value (use when you need Table-specific semantics)
 
@@ -580,22 +610,30 @@ public entry fun admin_action(caller: &signer) acquires Config {
 
 ### Error Handling
 
+Every error constant must have a `//` comment explaining what it means. This is not optional - it is the primary documentation for why a transaction was aborted.
+
 ```move
-// Named constants - never use raw integers in assert!
+// WRONG - bare constants with no explanation
 const E_NOT_ADMIN: u64 = 1;
 const E_ALREADY_EXISTS: u64 = 2;
-const E_NOT_FOUND: u64 = 3;
-const E_NOT_INITIALIZED: u64 = 4;
-const E_INSUFFICIENT_BALANCE: u64 = 5;
+
+// CORRECT - every constant has a comment
+const E_NOT_ADMIN: u64 = 1;           // caller is not the contract admin
+const E_ALREADY_EXISTS: u64 = 2;      // entry already exists; duplicates not allowed
+const E_NOT_FOUND: u64 = 3;           // requested entry does not exist
+const E_NOT_INITIALIZED: u64 = 4;     // module has not been initialized yet
+const E_INSUFFICIENT_BALANCE: u64 = 5; // vault balance too low to fulfill withdrawal
 
 assert!(condition, E_NOT_ADMIN);
 ```
 
-Two rules to follow with error codes:
+Three rules for error codes:
 
-**1. Don't define constants you don't use.** Unused error codes are dead code - define them only when you have a matching `assert!`.
+**1. Every constant gets a comment.** The comment must say what condition triggers it - not just restate the name.
 
-**2. Don't reuse codes for different meanings.** Each distinct failure condition needs its own code. For example, a "game not yet over" state and a "wrong turn" state are different failures - reusing `E_NOT_YOUR_TURN` for both will make debugging impossible. Create a new `E_GAME_NOT_OVER` instead.
+**2. Don't define constants you don't use.** Unused error codes are dead code - define them only when you have a matching `assert!`.
+
+**3. Don't reuse codes for different meanings.** Each distinct failure condition needs its own code. A "game not yet over" state and a "wrong turn" state are different failures - never share one code for both.
 
 ### auto init_module (runs on first publish)
 
