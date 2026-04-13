@@ -1,0 +1,14 @@
+# Claude Code local session settings - never commit
+.claude/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if anyone runs tooling locally)
+node_modules/

@@ -2,7 +2,7 @@
 
 > Drop this into Claude Code and get an expert Supra Move developer in your editor — instantly.
 
-![Version](https://img.shields.io/badge/version-2.2.0-blue)
+![Version](https://img.shields.io/badge/version-2.5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Move](https://img.shields.io/badge/language-Move-purple)
 ![Claude](https://img.shields.io/badge/Claude-Code%20Skill-orange)
@@ -50,7 +50,7 @@ This skill patches all of that — verified against live docs, the SDK source, a
 ### 1. Clone the skill
 
 ```bash
-git clone https://github.com/YOUR_ORG/supra-dev-skills.git
+git clone https://github.com/Entropy-Foundation/supra-dev-skills.git
 ```
 
 ### 2. Load into Claude Code
