@@ -1,7 +1,7 @@
 ---
 name: Supra Move Development
 description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
-version: 2.4.0
+version: 2.5.0
 ---
 
 # Supra Move Development Skill
@@ -18,12 +18,12 @@ These four rules cause compile errors on every single contract. They are not edg
 
 ---
 
-### RULE 1 - No `///` comments. Use `//` only.
+### RULE 1 - No `///` comments in your contract code. Use `//` only.
 
-`///` is not valid Move syntax on Supra. Every `///` is a compile error.
+When the Supra CLI compiles your Move source, `///` causes a compile error. Use `//` for all comments in files you write.
 
 ```move
-// WRONG - compile error on every line
+// WRONG - compile error when compiled with Supra CLI
 /// This module does X
 /// param: the value
 
@@ -32,7 +32,7 @@ These four rules cause compile errors on every single contract. They are not edg
 // param: the value
 ```
 
-This applies everywhere: file headers, function docs, inline comments. Never use `///`.
+**Note:** You may see `///` in Supra framework source files (e.g. dora-interface oracle files). Those are pre-compiled native modules — they are not passed through the CLI compiler. The ban applies only to `.move` files in your own project's `sources/` directory.
 
 ---
 
@@ -176,7 +176,7 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.4.0
+- Version: 2.5.0
 - Last Updated: See CHANGELOG.md
 - Tested Against: Supra CLI (latest)
 - Framework: supra_framework (pin rev for production - see warning above)
@@ -810,22 +810,33 @@ Docs: https://docs.supra.com/dvrf/build-supra-l1/getting-started
 
 ### Oracles - Real-Time Price Feeds
 
-> **Move.toml note:** The oracle module is deployed on-chain by Supra - it is NOT a git dependency. You must add the oracle contract address to your `[addresses]` section and confirm the module name from the docs. Example:
+> **Move.toml:** The oracle is a git dependency — add it under `[dependencies]` with the key `core`:
 > ```toml
-> [addresses]
-> my_module    = "YOUR-ADDRESS"
-> supra_oracle = "ORACLE_CONTRACT_ADDRESS"  # get from: https://docs.supra.com/oracles/data-feeds/push-oracle
+> [dependencies.SupraFramework]
+> git    = "https://github.com/Entropy-Foundation/aptos-core.git"
+> rev    = "dev"
+> subdir = "aptos-move/framework/supra-framework"
+>
+> [dependencies.core]
+> git    = "https://github.com/Entropy-Foundation/dora-interface"
+> subdir = "supra/testnet/core"
+> rev    = "master"
 > ```
+> The dependency key MUST be `core` (the package name in dora-interface). Using any other key causes a package name mismatch.
+
+The oracle module is `supra_oracle::supra_oracle_storage` (NOT `supra_oracle::oracle` — that module does not exist).
+
+`get_price` returns **4 values**: `(u128, u16, u64, u64)` = (price, decimal, timestamp, round). Always destructure all 4.
 
 ```move
 module my_module::price_reader {
-    use supra_oracle::oracle;
+    use supra_oracle::supra_oracle_storage;
 
-    // Returns (price: u128, decimal: u8, timestamp: u64)
+    // Returns (price: u128, decimal: u16, timestamp: u64, round: u64)
     // Pair index 0 = BTC/USDT - verify indices at oracle docs
     #[view]
     public fun get_btc_price(): u128 {
-        let (price, _decimal, _timestamp) = oracle::get_price(0);
+        let (price, _decimal, _timestamp, _round) = supra_oracle_storage::get_price(0);
         price
     }
 
@@ -833,9 +844,16 @@ module my_module::price_reader {
         sender: &signer,
         min_price: u128,
     ) {
-        let (price, _, _) = oracle::get_price(0); // BTC/USDT
+        let (price, _, _, _) = supra_oracle_storage::get_price(0); // BTC/USDT
         assert!(price >= min_price, 1);
         // proceed only if BTC is above threshold
+    }
+
+    // Batch fetch - more gas-efficient than looping get_price()
+    #[view]
+    public fun get_multi_price(): vector<supra_oracle_storage::Price> {
+        let pairs = vector[0u32, 1u32, 2u32]; // BTC, ETH, SOL
+        supra_oracle_storage::get_prices(pairs)
     }
 }
 ```

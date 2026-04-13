@@ -255,6 +255,21 @@ supra move tool view \
 Each price pair has a numeric **pair index** (e.g. BTC_USDT = 0, ETH_USDT = 1).
 Confirm exact indices at: https://docs.supra.com/oracles/data-feeds/push-oracle
 
+### Move.toml dependency
+
+```toml
+[dependencies.core]
+git    = "https://github.com/Entropy-Foundation/dora-interface"
+subdir = "supra/testnet/core"
+rev    = "master"
+```
+
+The key MUST be `core` — that is the package name declared in dora-interface. Any other key causes a mismatch error.
+
+The oracle module is `supra_oracle::supra_oracle_storage`. `supra_oracle::oracle` does not exist.
+
+`get_price` returns **4 values** `(u128, u16, u64, u64)` = (price, decimal, timestamp, round). Always destructure all 4.
+
 ### Price-Gated Transfer Example
 
 ```move
@@ -263,10 +278,9 @@ module my_module::price_gated {
     use supra_framework::coin;
     use std::signer;
     use supra_framework::event;
-    // Confirm exact oracle module path at oracle docs
-    use supra_oracle::oracle;
+    use supra_oracle::supra_oracle_storage;
 
-    const E_PRICE_TOO_LOW: u64 = 1;
+    const E_PRICE_TOO_LOW: u64 = 1; // price is below the caller's required minimum
 
     #[event]
     struct TransferExecuted has drop, store {
@@ -280,9 +294,9 @@ module my_module::price_gated {
         amount: u64,
         min_btc_price: u128,
     ) {
-        // Fetch BTC/USDT - pair index 0 (verify at oracle docs)
-        // Returns (price, decimal, timestamp)
-        let (price, _decimal, _timestamp) = oracle::get_price(0);
+        // Returns (price: u128, decimal: u16, timestamp: u64, round: u64)
+        // Pair index 0 = BTC/USDT (verify at oracle docs)
+        let (price, _decimal, _timestamp, _round) = supra_oracle_storage::get_price(0);
 
         assert!(price >= min_btc_price, E_PRICE_TOO_LOW);
 
@@ -298,8 +312,14 @@ module my_module::price_gated {
 
     #[view]
     public fun get_btc_price(): u128 {
-        let (price, _decimal, _timestamp) = oracle::get_price(0);
+        let (price, _decimal, _timestamp, _round) = supra_oracle_storage::get_price(0);
         price
+    }
+
+    // Batch fetch - preferred over looping get_price() for multiple pairs
+    #[view]
+    public fun get_multiple_prices(): vector<supra_oracle_storage::Price> {
+        supra_oracle_storage::get_prices(vector[0u32, 1u32]) // BTC, ETH
     }
 }
 ```
