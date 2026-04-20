@@ -1,13 +1,18 @@
-# Supra Move Development Skill
+# Supra Dev Skills
 
-> Drop this into Claude Code and get an expert Supra Move developer in your editor — instantly.
+> A Claude Code plugin that turns Claude into an expert Supra blockchain developer — Move contracts, wallet integration, and the TypeScript SDK, all pre-loaded with verified APIs.
 
-![Version](https://img.shields.io/badge/version-2.5.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Move](https://img.shields.io/badge/language-Move-purple)
-![Claude](https://img.shields.io/badge/Claude-Code%20Skill-orange)
+![Claude](https://img.shields.io/badge/Claude-Code%20Plugin-orange)
 
-A production-ready [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) that gives Claude deep, verified knowledge of Supra blockchain development — correct SDK patterns, CLI commands, dVRF 3.0, Oracles, Automation, Digital Asset NFTs, and all the Supra-vs-Aptos gotchas pre-loaded.
+This repo is a [Claude Code plugin](https://docs.claude.com/en/docs/claude-code/plugins) that ships three skills as a bundle. Claude auto-activates the right one based on what you're doing:
+
+| Skill | When it activates |
+|---|---|
+| **supra-move-development** | Writing / reviewing Move contracts, Supra framework, dVRF 3.0, Oracles, Automation, Digital Asset NFTs, CLI workflows |
+| **supra-multiwallet-skill** | Integrating Starkey + Ribbit wallets into a Next.js / React app, connect-wallet UI, sign-in-with-wallet JWT auth |
+| **supra-ts-sdk-skill** | Using `supra-ts-sdk` from a frontend / Node app — queries, balances, view functions, transaction build/simulate/submit |
 
 **No more hallucinated APIs. No more wrong module names. No more debugging code Claude made up.**
 
@@ -16,17 +21,79 @@ A production-ready [Claude Code skill](https://docs.anthropic.com/en/docs/claude
 ## Why this exists
 
 Claude's training data for Supra is incomplete and sometimes wrong:
-- Calls deprecated API methods that don't exist in the SDK
-- Uses `/rpc/v1/` endpoints (correct version is `/rpc/v3/`)
-- Gets `aptos_std::` → `supra_std::` rename wrong (it should stay as-is)
-- Generates VRF 2.x code (VRF 3.0 uses a completely different `permit_cap` pattern)
-- Uses `supra move tool run` for automation (correct command is `supra move automation register`)
 
-This skill patches all of that — verified against live docs, the SDK source, and the VRF interface.
+- Calls deprecated SDK methods that don't exist
+- Uses `/rpc/v1/` endpoints (correct is `/rpc/v3/`)
+- Gets the `aptos_std::` → `supra_std::` rename wrong (it should stay as-is)
+- Generates VRF 2.x code (VRF 3.0 uses a different `permit_cap` pattern)
+- Uses `supra move tool run` for automation (correct: `supra move automation register`)
+- Mixes up wallet injection points for Starkey vs Ribbit
+
+Each skill patches a different slice of this — verified against live docs, SDK source, and on-chain behavior.
 
 ---
 
-## What's covered
+## Install
+
+### Option A — From GitHub (recommended)
+
+Inside Claude Code:
+
+```
+/plugin marketplace add https://github.com/Entropy-Foundation/supra-dev-skills.git
+/plugin install supra-dev-skills
+```
+
+That's it. All three skills are now available and Claude will auto-invoke them based on the task.
+
+### Option B — Local development
+
+Clone the repo and point Claude Code at the local directory:
+
+```bash
+git clone https://github.com/Entropy-Foundation/supra-dev-skills.git
+claude --plugin-dir ./supra-dev-skills
+```
+
+### Option C — Reference a single skill without installing
+
+If you only want one skill and don't want the plugin machinery, reference its `SKILL.md` directly from your project's `.claude/CLAUDE.md`:
+
+```markdown
+@/path/to/supra-dev-skills/skills/supra-move-development/SKILL.md
+```
+
+---
+
+## Repo layout
+
+```
+supra-dev-skills/
+├── .claude-plugin/
+│   └── plugin.json                       # Plugin manifest
+├── skills/
+│   ├── supra-move-development/
+│   │   ├── SKILL.md
+│   │   ├── references/                   # Move deep-dives, SDK guide, patterns
+│   │   └── scripts/                      # Docker setup, deploy, example contracts
+│   ├── supra-multiwallet-skill/
+│   │   ├── SKILL.md
+│   │   ├── assets/                       # Working hook, components, API routes
+│   │   └── references/                   # Auth, hook API, troubleshooting
+│   └── supra-ts-sdk-skill/
+│       └── SKILL.md
+├── CHANGELOG.md
+├── LICENSE
+└── README.md
+```
+
+Each skill is self-contained — you can open any `skills/*/SKILL.md` to see exactly what Claude will read.
+
+---
+
+## What each skill covers
+
+### supra-move-development
 
 | Area | Details |
 |---|---|
@@ -34,90 +101,33 @@ This skill patches all of that — verified against live docs, the SDK source, a
 | **Supra Framework** | `supra_framework::` rename rules, `aptos_std::` exception, SupraCoin |
 | **CLI** | Init, compile, test, publish, profiles, `--upgrade-policy` |
 | **Digital Assets** | `aptos_token_objects` collection + token creation, MutatorRef, BurnRef, object transfer |
-| **dVRF 3.0** | `permit_cap<T>` pattern, two-level whitelisting, request/callback, max txn fee, gasless VRF |
+| **dVRF 3.0** | `permit_cap<T>` pattern, two-level whitelisting, request/callback, gasless VRF |
 | **Oracles** | Push oracle price feeds, pair indices, price-gated contracts |
-| **Automation** | `supra move automation register` with all correct flags + `--simulate` dry-run |
-| **TypeScript SDK** | `createSerializedRawTxObject`, `sendTxUsingSerializedRawTransaction`, `invokeViewMethod`, BCS encoding |
+| **Automation** | `supra move automation register` with correct flags + `--simulate` dry-run |
 | **Python SDK** | `supra-sdk`, `EntryFunction.natural()`, `TransactionPayload`, async client |
 | **REST API** | `/rpc/v3/` endpoints (v1/v2 deprecated), full endpoint table |
 | **Patterns** | SmartTable lifecycle, resource accounts, upgrade/migration, timelock, pausable |
 | **Gas** | Fee model, simulation with `simulateTxUsingSerializedRawTransaction` |
 
----
+### supra-multiwallet-skill
 
-## Quickstart
+- Production-tested `useSupraMultiWallet` hook (Starkey + Ribbit in one unified API)
+- `connectWallet()`, `disconnectWallet()`, `signMessage()`, `sendRawTransaction()`
+- Optional sign-in-with-wallet → JWT → httpOnly cookie flow (nonce / signature verification, edge-runtime API routes)
+- Drop-in `ConnectWalletHandler` + modal (Tailwind / shadcn / framer-motion / sonner)
+- Migration guidance for single-wallet → multiwallet
 
-### 1. Clone the skill
+### supra-ts-sdk-skill
 
-```bash
-git clone https://github.com/Entropy-Foundation/supra-dev-skills.git
-```
-
-### 2. Load into Claude Code
-
-**Option A — Project-level (recommended)**
-
-In your Supra project, create `.claude/CLAUDE.md`:
-```markdown
-@/path/to/supra-dev-skills/SKILL.md
-```
-Claude Code reads this automatically at the start of every session.
-
-**Option B — Reference in your prompt**
-```
-@/path/to/supra-dev-skills/SKILL.md
-```
-
-**Option C — Copy into your CLAUDE.md**
-
-Copy the contents of `SKILL.md` directly into your project's `.claude/CLAUDE.md` alongside any project-specific instructions.
-
-### 3. Start building
-
-```bash
-# Set up the Supra CLI (Docker-based)
-./scripts/setup_env.sh
-
-# Enter the container — all supra CLI commands run here
-docker exec -it supra_cli /bin/bash
-
-# Create a new Move package
-supra move tool init --package-dir /supra/move_workspace/myProject --name myProject
-
-# Deploy
-./scripts/deploy.sh myProject myAccount testnet
-```
+- `SupraClient` setup for Next.js / React
+- Account queries, balances, resources, events
+- Transaction lifecycle: build, simulate, submit, wait
+- View functions, ABI proxies, Move type mapping
+- BCS encoding with `supra-l1-sdk-core`
 
 ---
 
-## Repo structure
-
-```
-supra-dev-skills/
-├── SKILL.md                     # Main skill file — Claude reads this
-├── CHANGELOG.md                 # Full version history with every fix documented
-├── references/
-│   ├── core_topics.md           # Move fundamentals deep-dive
-│   ├── supra_vs_aptos.md        # Aptos → Supra migration cheatsheet
-│   ├── native_features.md       # dVRF 3.0, Oracles, Automation — full examples
-│   ├── sdk_guide.md             # TypeScript + Python SDK with BCS encoding
-│   ├── resource_accounts.md     # SignerCapability, vault, DAO patterns
-│   ├── patterns.md              # SmartTable lifecycle, upgrade, multi-signer, gas
-│   └── object_model.md          # Supra object model + Digital Assets
-└── scripts/
-    ├── setup_env.sh             # Docker + Supra CLI setup
-    ├── deploy.sh                # Compile and publish automation
-    ├── version_check.sh         # CLI version check
-    ├── example_contract.move    # Counter — basic module template
-    ├── token_contract.move      # Custom coin (mint / burn / transfer)
-    ├── events_example.move      # Events + registry pattern
-    ├── advanced_examples.move   # Admin, pausable, DA NFT, timelock
-    └── test_examples.move       # Unit test patterns
-```
-
----
-
-## Key gotchas this skill prevents
+## Key gotchas these skills prevent
 
 **1. `aptos_std::` must NOT be renamed**
 ```move
@@ -171,7 +181,7 @@ supra_vrf::rng_request<LotteryPermit>(&state.permit_cap, string::utf8(b"distribu
 - [Supra Docs](https://docs.supra.com)
 - [SupraScan Explorer](https://suprascan.io)
 - [StarKey Wallet](https://starkey.app)
-- [TypeScript SDK](https://github.com/Entropy-Foundation/supra-l1-sdk)
+- [TypeScript SDK](https://github.com/Entropy-Foundation/supra-ts-sdk)
 - [Supra Framework Source](https://github.com/Entropy-Foundation/aptos-core/tree/dev/aptos-move/framework/supra-framework)
 - [VRF Interface](https://github.com/Entropy-Foundation/vrf-interface)
 
@@ -183,6 +193,7 @@ PRs welcome — especially for:
 - New SDK method verifications
 - Updated VRF / Automation / Oracle docs
 - Additional Move patterns
+- Wallet edge cases
 - Bug reports when Claude still gets something wrong
 
 Please document the source (official docs, SDK source, or on-chain verification) for any factual changes.

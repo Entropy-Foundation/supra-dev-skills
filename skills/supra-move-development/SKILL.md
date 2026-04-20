@@ -1,5 +1,5 @@
 ---
-name: Supra Move Development
+name: supra-move-development
 description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
 version: 2.5.0
 ---
