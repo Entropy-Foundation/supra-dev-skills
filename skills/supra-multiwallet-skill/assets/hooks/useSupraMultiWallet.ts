@@ -1016,102 +1016,105 @@ const useSupraMultiWallet = () => {
   };
 
   // Event handling for Starkey wallet only
-  useEffect(() => {
-    if (selectedWallet === 'starkey' && walletCapabilities.eventListeners) {
-      const handleExtensionEvents = (event: any) => {
-        if (event?.data?.name?.startsWith('starkey-')) {
-          switch (event?.data?.name) {
-            case 'starkey-extension-installed': {
-              checkIsExtensionInstalled();
-              break;
+  const starkeyEventHandlerRef = useRef<(event: any) => void>();
+  starkeyEventHandlerRef.current = (event: any) => {
+    if (event?.data?.name?.startsWith('starkey-')) {
+      switch (event?.data?.name) {
+        case 'starkey-extension-installed': {
+          checkIsExtensionInstalled();
+          break;
+        }
+        case 'starkey-wallet-updated': {
+          (async () => {
+            const authCheckResponse = await fetch('/api/auth/check', {
+              credentials: 'include',
+            });
+            if (authCheckResponse.ok) {
+              await fetch('/api/auth/wallet-logout', { method: 'POST' });
             }
-            case 'starkey-wallet-updated': {
-              (async () => {
-                const authCheckResponse = await fetch('/api/auth/check', {
-                  credentials: 'include',
-                });
-                if (authCheckResponse.ok) {
-                  await fetch('/api/auth/wallet-logout', { method: 'POST' });
-                }
 
-                const responseAcc = await supraProvider.account();
-                if (responseAcc.length) {
-                  setAccounts(responseAcc);
-                  try {
-                    const nonce = await fetch('/api/auth/nonce').then((r) =>
-                      r.text()
-                    );
-                    const signResult = await signMessage(
+            const responseAcc = await supraProvider.account();
+            if (responseAcc.length) {
+              setAccounts(responseAcc);
+              try {
+                const nonce = await fetch('/api/auth/nonce').then((r) =>
+                  r.text()
+                );
+                const signResult = await signMessage(
                       'Sign this message to login to multiwallet. By signing this message, you agree to the Terms of Service and Privacy Policy of multiwallet at https://multiwallet.trade/tos',
-                      nonce,
-                      responseAcc[0]
-                    );
+                  nonce,
+                  responseAcc[0]
+                );
 
-                    if (!signResult) return;
+                if (!signResult) return;
 
-                    const { signature } = signResult;
+                const { signature } = signResult;
 
-                    const authResponse = await fetch('/api/auth/create-jwt', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        address: responseAcc[0],
-                        signature,
-                        nonce,
-                      }),
-                    });
+                const authResponse = await fetch('/api/auth/create-jwt', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    address: responseAcc[0],
+                    signature,
+                    nonce,
+                  }),
+                });
 
-                    const { token } = await authResponse.json();
+                const { token } = await authResponse.json();
 
-                    await fetch('/api/auth/wallet-login', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ token }),
-                    });
+                await fetch('/api/auth/wallet-login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token }),
+                });
 
-                    window.dispatchEvent(
-                      new CustomEvent(WALLET_EVENTS.CONNECTED, {
-                        detail: {
-                          timestamp: Date.now(),
-                          account: responseAcc[0],
-                        },
-                      })
-                    );
+                window.dispatchEvent(
+                  new CustomEvent(WALLET_EVENTS.CONNECTED, {
+                    detail: {
+                      timestamp: Date.now(),
+                      account: responseAcc[0],
+                    },
+                  })
+                );
 
-                    await updateAccounts();
-                  } catch (error) {
-                    console.error('Account switch auth error:', error);
-                    toast('Authentication Failed', {
-                      description: 'Failed to authenticate new account',
-                    });
-                  }
-                } else {
-                  resetWalletData();
-                  router.push('/');
-                }
-                setLoading(false);
-              })();
-              break;
-            }
-            case 'starkey-wallet-disconnected': {
+                await updateAccounts();
+              } catch (error) {
+                console.error('Account switch auth error:', error);
+                toast('Authentication Failed', {
+                  description: 'Failed to authenticate new account',
+                });
+              }
+            } else {
               resetWalletData();
               router.push('/');
-              setLoading(false);
-              break;
             }
-            case 'starkey-window-removed': {
-              setLoading(false);
-              break;
-            }
-          }
+            setLoading(false);
+          })();
+          break;
         }
-      };
-
-      checkIsExtensionInstalled();
-      window.addEventListener('message', handleExtensionEvents);
-      return () => window.removeEventListener('message', handleExtensionEvents);
+        case 'starkey-wallet-disconnected': {
+          resetWalletData();
+          router.push('/');
+          setLoading(false);
+          break;
+        }
+        case 'starkey-window-removed': {
+          setLoading(false);
+          break;
+        }
+      }
     }
-  }, [selectedWallet, walletCapabilities, supraProvider]);
+  };
+
+  useEffect(() => {
+    if (selectedWallet !== 'starkey' || !walletCapabilities.eventListeners) {
+      return;
+    }
+    const listener = (event: any) => starkeyEventHandlerRef.current?.(event);
+    checkIsExtensionInstalled();
+    window.addEventListener('message', listener);
+    return () => window.removeEventListener('message', listener);
+  }, [selectedWallet, walletCapabilities.eventListeners]);
 
   // Token revalidation effect
   useEffect(() => {

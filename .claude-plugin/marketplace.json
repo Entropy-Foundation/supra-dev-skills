@@ -1,0 +1,15 @@
+{
+  "name": "supra-dev-skills",
+  "owner": {
+    "name": "Supra / Entropy Foundation",
+    "email": "b.jain@supra.com"
+  },
+  "plugins": [
+    {
+      "name": "supra-dev-skills",
+      "source": "./",
+      "description": "Supra blockchain development toolkit: Move smart contracts, Starkey/Ribbit multiwallet integration, and the Supra L1 TypeScript SDK.",
+      "version": "3.0.0"
+    }
+  ]
+}

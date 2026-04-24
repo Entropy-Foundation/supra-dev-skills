@@ -41,7 +41,7 @@ Inside Claude Code:
 
 ```
 /plugin marketplace add https://github.com/Entropy-Foundation/supra-dev-skills.git
-/plugin install supra-dev-skills
+/plugin install supra-dev-skills@supra-dev-skills
 ```
 
 That's it. All three skills are now available and Claude will auto-invoke them based on the task.

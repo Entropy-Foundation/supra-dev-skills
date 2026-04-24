@@ -72,14 +72,20 @@ The reason we use a separate `wallet-login` route (instead of just setting the c
 
 ### Change the auth message
 
-The sign-in message appears in **four places** and all must match:
+**This step is required, not optional** — the template string is branded to `multiwallet` / `multiwallet.trade/tos` and must be replaced with the target project's name and TOS URL before ship.
 
-1. `hooks/useSupraMultiWallet.ts` — inside the Starkey case of `connectWallet()` (around line 498)
-2. `hooks/useSupraMultiWallet.ts` — inside the Ribbit case of `connectWallet()` (around line 578)
-3. `hooks/useSupraMultiWallet.ts` — inside `signIn()` revalidation (around line 922)
-4. `app/api/auth/create-jwt/route.ts` — the `AUTH_MESSAGE` constant at the top
+The sign-in message appears in **six places** and every copy must be byte-identical:
 
-If any of these differ by even a trailing space, `nacl.sign.detached.verify` returns `false` and `/api/auth/create-jwt` returns 401.
+1. `hooks/useSupraMultiWallet.ts` — Starkey branch of `connectWallet()` (around line 498)
+2. `hooks/useSupraMultiWallet.ts` — Ribbit branch of `connectWallet()` (around line 578)
+3. `hooks/useSupraMultiWallet.ts` — `signIn()` revalidation (around line 922)
+4. `hooks/useSupraMultiWallet.ts` — `checkAndRevalidateToken()` token-expiry path (around line 974)
+5. `hooks/useSupraMultiWallet.ts` — `starkey-wallet-updated` event handler / account switch (around line 1044)
+6. `app/api/auth/create-jwt/route.ts` — the `AUTH_MESSAGE` constant at the top
+
+If any copy drifts (even a trailing space, a word like `this` inserted, or a `Token Expiry:` prefix), `nacl.sign.detached.verify` returns `false` and `/api/auth/create-jwt` returns 401 — the failure is silent from the user's perspective.
+
+**Recommended workflow:** do a single project-wide find-and-replace of the whole string, then grep for the original brand to confirm nothing slipped through. For extra safety, consider extracting the message to a shared constant (e.g. `lib/authMessage.ts`) imported by both the hook and the route so there is only one source of truth.
 
 ### Change nonce expiration
 
