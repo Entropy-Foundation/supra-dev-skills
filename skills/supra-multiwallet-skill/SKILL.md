@@ -7,7 +7,7 @@ description: Integrate Starkey and Ribbit wallet connect authentication for the 
 
 This skill integrates **Starkey** and **Ribbit** wallet support for the **Supra blockchain** into a Next.js application, with optional JWT-based authentication (sign-in-with-wallet, protected routes).
 
-The canonical implementation lives in `assets/` as working, production-tested code copied from [Crystara-Markets/supra-multiwallet](https://github.com/Crystara-Markets/supra-multiwallet). The strategy is to **copy these files into the target project and adapt them**, rather than regenerate them from scratch — the hook alone is ~1,200 lines of carefully worked-out wallet edge cases and they are easy to break.
+The canonical implementation lives in `assets/` as working, production-tested code copied from [Crystara-Markets/supra-multiwallet](https://github.com/Crystara-Markets/supra-multiwallet). The strategy is to **copy these files into the target project and adapt them**, rather than regenerate them from scratch — the hook alone is ~1,550 lines of carefully worked-out wallet edge cases and they are easy to break.
 
 ## What this skill produces
 
@@ -32,8 +32,12 @@ Before touching files, figure out:
 The runtime dependencies are:
 
 ```bash
-npm install ribbit-wallet-connect tweetnacl jose ethers supra-l1-sdk-core sonner
+npm install ribbit-wallet-connect tweetnacl jose js-sha3 ethers supra-l1-sdk-core sonner
 ```
+
+`js-sha3` is used by `lib/auth.ts` to derive an address from a public key, which
+is what binds a signature to the account claiming it. Web Crypto has no SHA3, and
+`js-sha3` is pure JS so it runs on the edge runtime.
 
 If using the provided `ConnectWalletHandler.tsx` modal, also add:
 
@@ -54,6 +58,26 @@ All files referenced below live in this skill's `assets/` directory. Read them w
 | `assets/hooks/useSupraMultiWallet.ts` | `hooks/useSupraMultiWallet.ts` |
 | `assets/hooks/useConversionUtils.ts` | `hooks/useConversionUtils.ts` |
 | `assets/components/WalletProvider.tsx` | `components/WalletProvider.tsx` |
+| `assets/lib/address.ts` | `lib/address.ts` |
+| `assets/lib/starkey-network.ts` | `lib/starkey-network.ts` |
+
+The last two are not optional. `lib/address.ts` is what every address comparison
+goes through — Supra addresses arrive with different padding and case depending
+on their source, so a raw `===` produces phantom account switches. `lib/starkey-network.ts`
+is what makes network switching work in Starkey's mobile dApp browser, which
+rejects `changeNetwork` *after* performing the switch.
+
+**Copy if the app has Server Components that read the session (App Router):**
+
+| From | To |
+|---|---|
+| `assets/components/WalletSessionSync.tsx` | `components/WalletSessionSync.tsx` |
+
+**Copy if the app should support Starkey on mobile:**
+
+| From | To |
+|---|---|
+| `assets/lib/starkey-link.ts` | `lib/starkey-link.ts` |
 
 **Copy if using the provided modal UI:**
 
@@ -77,13 +101,22 @@ All files referenced below live in this skill's `assets/` directory. Read them w
 
 Several values in the copied files are hardcoded to the reference project and **must be replaced** before the integration works correctly. These are easy to miss — do a single sweep with `str_replace` for each:
 
+**In `lib/auth-constants.ts`:**
+- **REQUIRED — set `APP_NAME` and `TOS_URL`.** These two values are the only
+  place the sign-in message is defined. Every client call site and the
+  `create-jwt` route import `AUTH_MESSAGE` from this file, so there is nothing
+  to keep in sync by hand. After editing, grep the project for
+  `multiwallet.trade` and for any remaining literal `'Sign message to login`
+  — both should return nothing. A second copy of that string anywhere is a
+  silent 401 waiting for someone to edit one and not the other.
+- Sign this same `AUTH_MESSAGE` on revalidation too. Earlier versions signed
+  `'Sign message to revalidate login to …'` and `'Token Expiry: …'`, which the
+  server never verifies, so token revalidation returned 401 every time and the
+  only way out was a full reconnect.
+
 **In `hooks/useSupraMultiWallet.ts`:**
-- **REQUIRED — update the sign-in auth message.** The template string `'Sign message to login to multiwallet. By signing this message, you agree to the Terms of Service and Privacy Policy of multiwallet at https://multiwallet.trade/tos'` appears **five times** in `hooks/useSupraMultiWallet.ts` (Starkey connect ~line 498, Ribbit connect ~line 578, `signIn()` revalidation ~line 922, `checkAndRevalidateToken()` ~line 974, Starkey `starkey-wallet-updated` account-switch handler ~line 1044) **and once more** as the `AUTH_MESSAGE` constant in `app/api/auth/create-jwt/route.ts`. Replace with the target project's name and TOS URL. All six copies **must be byte-identical** — `nacl.sign.detached.verify` returns `false` on any mismatch (even a trailing space) and the server responds 401 with no clear signal to the user. Recommended: do a single project-wide `str_replace` of the entire string, then grep to confirm zero occurrences of the old brand remain.
 - The Ribbit `dappMetadata` object (`name: 'multiwallet'`, `description: 'NFT Marketplace and Lootbox Platform'`) should be updated to describe the target dApp.
 - `STORAGE_KEY = 'multiwallet.selectedWallet'` — optional, but namespacing it to the project (e.g. `'myapp.selectedWallet'`) avoids collisions if the user visits multiple Supra dApps.
-
-**In `app/api/auth/create-jwt/route.ts`:**
-- The `AUTH_MESSAGE` constant must **exactly match** the string passed to `signMessage()` on the client. If they differ by even one character, `nacl.sign.detached.verify` returns false and login breaks silently (the request just returns 401).
 
 **In `components/ConnectWalletHandler.tsx` (if using it):**
 - Image imports at the top reference `@/public/walletIcons/Starkey.png`, `@/public/walletIcons/Ribbit.jpg`, and `@/public/main/icon.png`. The user must either (a) download these icons from the reference repo's `public/` directory, (b) provide their own, or (c) replace the `<img>` tags with inline SVGs. Don't leave broken image references.
@@ -96,18 +129,63 @@ In `app/layout.tsx` (or the nearest root client boundary), wrap children with `<
 ```tsx
 import { WalletProvider } from "@/components/WalletProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { verifyToken } from "@/lib/auth";
+import { cookies } from "next/headers";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Pass the rendered-with address if any Server Component reads the session.
+  const session = await verifyToken(cookies().get("authToken")?.value);
+
   return (
     <html lang="en">
       <body>
         <Toaster />
-        <WalletProvider>{children}</WalletProvider>
+        <WalletProvider serverAddress={session?.address ?? null}>
+          {children}
+        </WalletProvider>
       </body>
     </html>
   );
 }
 ```
+
+### Why `serverAddress`
+
+A wallet change is a purely client-side event. A Server Component that reads the
+auth cookie — a dashboard, a balance, a gated page — keeps rendering the
+**previous** wallet's data after the user switches accounts, because the RSC
+payload is not re-fetched. The hook's state is correct and the screen is wrong,
+which the user reports as "it only updates when I refresh".
+
+Passing `serverAddress` mounts `WalletSessionSync`, which compares the connected
+address against the one the page was rendered with and calls `router.refresh()`
+when they diverge. Omit the prop entirely for an app that renders everything
+client-side.
+
+If the layout is the wrong place to read the session — a route-group layout or a
+single page owns it instead — mount the component directly there and leave the
+prop off the provider. It renders nothing:
+
+```tsx
+import { WalletSessionSync } from "@/components/WalletSessionSync";
+
+<WalletSessionSync serverAddress={session?.address ?? null} />
+```
+
+### Routing on disconnect is the caller's choice
+
+The hook does not navigate. Pass `onDisconnect` if the app should go somewhere
+when the wallet disconnects or the user switches to an account that has not
+approved the site:
+
+```tsx
+const router = useRouter();
+const wallet = useSupraMultiWallet({ onDisconnect: () => router.push('/') });
+```
+
+Earlier versions called `router.push('/')` from inside a wallet event handler,
+which yanks the user out of a modal or a nested layout in any app whose landing
+route is not `/`.
 
 ## Step 6: Set environment variables
 
@@ -147,7 +225,7 @@ export function MyComponent() {
     sendRawTransaction,
     getAvailableWallets, // returns [{ type, name, isInstalled, capabilities }]
     authFetch,         // fetch wrapper that auto-revalidates the JWT before the call
-  } = useSupraMultiWallet();
+  } = useSupraMultiWallet();   // optionally: useSupraMultiWallet({ onDisconnect })
 
   if (accounts.length === 0) {
     return <button onClick={() => connectWallet('starkey')}>Connect Starkey</button>;
@@ -157,6 +235,13 @@ export function MyComponent() {
 ```
 
 Or, for the full drop-in modal with a "Connect Wallet" button that shows both wallets side-by-side, use `ConnectWalletHandler` as a render-prop wrapper — see `references/using-connect-wallet-handler.md`.
+
+On a phone or tablet the modal shows an **Open in Starkey** row instead of an
+"install the extension" message, which hands the current URL to Starkey's in-app
+dApp browser and reopens the page where `window.starkey` exists. That row needs
+`lib/starkey-link.ts` copied. Warn the user what the hop costs: the page opens
+fresh in a different browser, so no cookies, no `localStorage` and no session go
+with it — anything behind a login asks again on the other side.
 
 ## Step 8: (If auth is used) Protect a route
 
@@ -182,8 +267,18 @@ Tell the user to:
 2. Click connect → select a wallet → approve in the wallet → sign the message
 3. Check DevTools → Application → Cookies for `authToken` being set as httpOnly
 4. Check the network tab: `/api/auth/nonce` → `/api/auth/create-jwt` → `/api/auth/wallet-login` should all return 200
+5. **Switch account inside Starkey with the page open.** The UI must follow
+   without a reload — address, balance, and anything a Server Component rendered
+   from the session. This is the test that catches a listener wired to the wrong
+   transport, and it passes by accident if you only ever reload.
+6. **Reload the page.** The user must stay signed in. A single `account()` read
+   at mount resolves empty on a connected wallet and signs them out here.
+7. **Open the app in Starkey's mobile dApp browser** and connect. This is where
+   `changeNetwork` rejects after succeeding, so a desktop-only test tells you
+   nothing about it.
 
-If something breaks, see `references/troubleshooting.md`.
+If something breaks, see `references/troubleshooting.md` and
+`references/starkey-runtime-quirks.md`.
 
 ---
 
@@ -191,6 +286,7 @@ If something breaks, see `references/troubleshooting.md`.
 
 Load these on demand (don't read them all upfront):
 
+- **`references/starkey-runtime-quirks.md`** — what the Starkey extension actually does: which events report an account switch, why the first `account()` read comes back empty, why `changeNetwork` lies in the mobile dApp browser, address shapes, and detection that has no natural end. Read **before** debugging any connect, switch, or network problem, and before adapting the event or network code.
 - **`references/hook-api.md`** — full signature and behavior of every method returned by `useSupraMultiWallet`. Read when the user asks about a specific method or wants to build custom UI around the hook.
 - **`references/sending-transactions.md`** — how `sendRawTransaction` works across both wallets, BCS argument serialization, type args, chain selection. Read when implementing token transfers or Move function calls.
 - **`references/auth-architecture.md`** — the nonce/JWT/signature flow in detail, why each piece exists, and how to customize expiration windows, the auth message, or the revalidation cadence. Read when modifying auth behavior.
@@ -203,7 +299,13 @@ Load these on demand (don't read them all upfront):
 
 ## Key things to remember
 
-- **Starkey and Ribbit behave differently.** Starkey is a browser extension (synchronous detection via `window.starkey?.supra`), supports account switching events, network switching, and emits `starkey-*` window messages. Ribbit is an SDK that's initialized via `initSdk()` and uses its own internal state — it does *not* support network switching (the user must switch in-app) or account-switch events. The hook abstracts this via the `WalletCapabilities` object and capability guards — respect those guards if extending the hook.
+- **Starkey and Ribbit behave differently.** Starkey is a browser extension (detected via `window.starkey?.supra`, though it injects *after* page scripts run — poll for it), and supports account switching and network switching. Ribbit is an SDK initialized via `initSdk()` that uses its own internal state — it does *not* support network switching (the user must switch in-app) or account-switch events. The hook abstracts this via the `WalletCapabilities` object and capability guards — respect those guards if extending the hook.
+- **Starkey reports an account switch through `provider.on('accountChanged')`.** That, plus `networkChanged` and `disconnect`, is the documented event surface. The `starkey-*` `window.postMessage` events are the extension's internal page-to-content-script bridge, **not its API**, and current builds do not deliver an account switch to the page that way. Never make those messages the only listener: a project that does keeps rendering the previous wallet until the page is reloaded. No removal method is documented, so subscribe once per mount, read live state through refs inside the handlers, and feature-test `off`/`removeListener` on teardown.
+- **A wallet change does not re-render Server Components.** The auth cookie changed, but the RSC payload is not re-fetched. Mount `WalletSessionSync` wherever a Server Component reads the session, or the screen keeps showing the previous wallet's data with correct client state behind it.
+- **The wallet lies about two things, so verify by reading back.** `account()` answers empty for a moment after every page load on a wallet that is connected — retry before believing it. `changeNetwork` rejects *after* switching in the mobile dApp browser — read the chain back and let that decide, never the call's own answer.
+- **Compare addresses through `sameAddress`, never `===`.** The extension, Move view responses, JWT claims and `localStorage` disagree about zero-padding and case for the same account.
+- **The sign-in message lives in one file.** `lib/auth-constants.ts` exports `AUTH_MESSAGE`; every client call site and the `create-jwt` route import it. Sign that same string on revalidation too — the server verifies exactly one message, so a "revalidate" variant can never verify.
+- **A valid signature is not proof of an address.** `nacl.sign.detached.verify` only proves the caller holds the key they sent you. `verifyWalletSignature` also derives that public key back to an address (`sha3_256(pubkey || 0x00)`) and compares it with the claimed one. Removing that second step turns the login route into an authentication bypass.
 - **The sign-in message must match exactly on client and server.** This is the #1 source of "why doesn't login work" bugs. If the user is customizing the message, update it in all four places: the Starkey connect path, the Ribbit connect path, the `signIn()` revalidation path, and `AUTH_MESSAGE` in the create-jwt route.
 - **Edge runtime is used for all auth routes.** `jose` and Web Crypto API both work on the edge, which is why this template can deploy to Cloudflare Workers / Vercel Edge. Don't accidentally import Node-only modules into `lib/auth.ts` or the API routes.
-- **The hook is long (~1,200 lines) for good reasons.** It handles wallet-install polling, storage fallbacks (localStorage → sessionStorage → cookie), starkey-wallet-updated events that require re-authentication, and graceful degradation when a wallet lacks a capability. Resist the urge to "clean it up" without understanding what each section does.
+- **The hook is long (~1,550 lines) for good reasons.** It handles wallet-install polling with no deadline, storage fallbacks (localStorage → sessionStorage → cookie), retried account reads, provider events plus a window-message fallback, account switches that require re-authentication, and graceful degradation when a wallet lacks a capability. Resist the urge to "clean it up" without understanding what each section does — most of what looks redundant is a wallet quirk with a comment above it explaining which one.

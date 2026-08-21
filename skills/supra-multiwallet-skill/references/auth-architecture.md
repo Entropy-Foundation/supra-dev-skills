@@ -72,20 +72,53 @@ The reason we use a separate `wallet-login` route (instead of just setting the c
 
 ### Change the auth message
 
-**This step is required, not optional** — the template string is branded to `multiwallet` / `multiwallet.trade/tos` and must be replaced with the target project's name and TOS URL before ship.
+**This step is required, not optional** — the default is branded to `MyApp` /
+`myapp.com/tos` and must be replaced with the target project's name and TOS URL
+before ship.
 
-The sign-in message appears in **six places** and every copy must be byte-identical:
+Edit two values in `lib/auth-constants.ts`:
 
-1. `hooks/useSupraMultiWallet.ts` — Starkey branch of `connectWallet()` (around line 498)
-2. `hooks/useSupraMultiWallet.ts` — Ribbit branch of `connectWallet()` (around line 578)
-3. `hooks/useSupraMultiWallet.ts` — `signIn()` revalidation (around line 922)
-4. `hooks/useSupraMultiWallet.ts` — `checkAndRevalidateToken()` token-expiry path (around line 974)
-5. `hooks/useSupraMultiWallet.ts` — `starkey-wallet-updated` event handler / account switch (around line 1044)
-6. `app/api/auth/create-jwt/route.ts` — the `AUTH_MESSAGE` constant at the top
+```ts
+const APP_NAME = "MyApp";
+const TOS_URL = "https://myapp.com/tos";
+```
 
-If any copy drifts (even a trailing space, a word like `this` inserted, or a `Token Expiry:` prefix), `nacl.sign.detached.verify` returns `false` and `/api/auth/create-jwt` returns 401 — the failure is silent from the user's perspective.
+That file exports `AUTH_MESSAGE`, and it is the only definition of the string.
+Every client call site — both `connectWallet` branches, `signIn()`,
+`checkAndRevalidateToken()`, the account-switch handler — and the `create-jwt`
+route import it. There is nothing to keep in sync by hand.
 
-**Recommended workflow:** do a single project-wide find-and-replace of the whole string, then grep for the original brand to confirm nothing slipped through. For extra safety, consider extracting the message to a shared constant (e.g. `lib/authMessage.ts`) imported by both the hook and the route so there is only one source of truth.
+**The string is verified byte-for-byte.** A trailing space, an inserted word, or
+a `Token Expiry:` prefix makes `nacl.sign.detached.verify` return `false` and
+`/api/auth/create-jwt` answer 401, with no signal the user can act on. This is
+why the message is not parameterized per flow: the server verifies exactly one
+string, so a "revalidate" variant can never verify. Earlier versions of this
+template signed three different strings and token revalidation returned 401 every
+time — the only way out was a full reconnect.
+
+After editing, grep the project for `multiwallet.trade` and for any literal
+`'Sign message to login`. Both should return nothing. A second copy of the string
+anywhere is a silent 401 waiting for someone to edit one and not the other.
+
+### Binding the signature to the address
+
+A verified signature proves the caller holds *some* key. It does not prove they
+hold the key for the address they are claiming. `verifyWalletSignature` therefore
+does two things:
+
+1. `nacl.sign.detached.verify(message, signature, publicKey)`
+2. `deriveSupraAddress(publicKey) === normalizeAddress(address)`
+
+Step 2 derives the account address the key controls — `sha3_256(pubkey || 0x00)`,
+the Aptos-inherited single-Ed25519 scheme that Supra uses — and compares it with
+the claim. **Without it the route is an authentication bypass:** an attacker
+signs `AUTH_MESSAGE` with their own key, sends any `address` they like, and the
+server mints a JWT for it.
+
+The limitation this carries: an account that has rotated its key, or a multi-key
+account, does not derive back to its address and cannot sign in this way. To
+support those, read the on-chain authentication key for `address` and compare
+against that instead of the derived value.
 
 ### Change nonce expiration
 

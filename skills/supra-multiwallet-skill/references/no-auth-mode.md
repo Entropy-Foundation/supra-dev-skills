@@ -81,7 +81,45 @@ Delete these methods from the hook (nothing will call them):
 - The revalidation `useEffect` (the `setInterval` on a daily timer)
 - `authFetch` — or replace with a plain `(url, opts) => fetch(url, { ...opts, credentials: 'include' })` passthrough
 
-Also remove the auto-revalidation block inside the `starkey-wallet-updated` handler (the nested re-auth logic in the `useEffect` that listens for Starkey events).
+### Strip the re-auth out of the account-switch handler — but keep the handler
+
+`handleStarkeyAccountSwitch` does two separable things: it follows the account
+the extension now exposes, and it mints a new session for it. Remove only the
+second. What must stay:
+
+```ts
+const handleStarkeyAccountSwitch = async (nextAccounts: string[]) => {
+  const next = nextAccounts?.[0] ?? null;
+
+  if (!next) {
+    resetWalletData();
+    onDisconnectRef.current?.();
+    setLoading(false);
+    return;
+  }
+
+  if (sameAddress(next, accountsRef.current[0])) {
+    await updateAccounts();
+    setLoading(false);
+    return;
+  }
+
+  setAccounts([next]);
+  localStorage.setItem('starkey.accounts.0', next);
+  await updateAccounts();
+  setLoading(false);
+};
+```
+
+Delete the nonce / `signMessage` / `create-jwt` / `wallet-login` block in the
+middle, the `wallet-logout` calls, and the `toast('Authentication Failed', …)`
+in the catch. **Do not delete the function or its callers.** It is what the
+`accountChanged` provider event and the `starkey-*` window-message fallback both
+route into — without it, switching account in Starkey does nothing until the
+page is reloaded, which is the single most-reported bug in this integration.
+
+Keep the `sameAddress` check too. Without it every event re-runs the whole body
+for an account that has not changed.
 
 ### Remove disconnect's auth call
 
@@ -97,6 +135,12 @@ After stripping:
 - `getAvailableWallets()` — works
 - `accounts`, `balance`, `selectedWallet`, `loading` — all work
 - Wallet events on `window` — all still fire
+- `provider.on('accountChanged' | 'networkChanged' | 'disconnect')` — still
+  subscribed, so account switches and network changes still reach the UI
+
+Two files stay required even with auth stripped: `lib/address.ts` (every address
+comparison) and `lib/starkey-network.ts` (network switching that works in the
+mobile dApp browser). Neither touches auth.
 
 ## When to add auth back in later
 

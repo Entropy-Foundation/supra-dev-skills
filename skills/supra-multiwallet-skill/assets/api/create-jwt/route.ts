@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createToken, validateNonce, verifyWalletSignature } from '@/lib/auth';
+import { AUTH_MESSAGE } from '@/lib/auth-constants';
 
 export const runtime = 'edge';
 
-// The exact message that must be signed by the wallet
-const AUTH_MESSAGE = 'Sign message to login to multiwallet. By signing this message, you agree to the Terms of Service and Privacy Policy of multiwallet at https://multiwallet.trade/tos';
+// AUTH_MESSAGE is imported, never re-declared here. It is verified byte-for-byte
+// against what the client signed, so a second copy of the string is a silent 401
+// waiting for someone to edit one and not the other.
 
 export async function POST(request: Request) {
   try {

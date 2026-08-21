@@ -4,6 +4,160 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [3.1.0] — August 2026
+
+Starkey runtime correctness pass on `supra-multiwallet-skill`, from defects found
+while shipping a production Starkey dApp against version 3.0.0. Everything below
+was reproducible in the shipped template.
+
+### Security
+
+- **`verifyWalletSignature` did not bind the public key to the claimed address** —
+  an authentication bypass. `nacl.sign.detached.verify` only proves the caller
+  holds *some* key; the shipped code left the address check as a `TODO` and
+  returned `true`. An attacker could sign `AUTH_MESSAGE` with their own key, send
+  any `address`, and receive a JWT for it. `lib/auth.ts` now derives the address
+  the key controls — `sha3_256(pubkey || 0x00)`, Supra's Aptos-inherited
+  single-Ed25519 scheme — and compares it with the claim. Adds a `js-sha3`
+  dependency (pure JS, edge-safe). Documented in `references/auth-architecture.md`,
+  including the rotated-key / multi-key limitation this derivation carries.
+- **`sendRawTransaction` signed as `accounts[0]` without checking the wallet was
+  still on that account.** After an account switch whose re-auth failed, the app
+  could sign as account B while the session claimed account A. It now re-reads the
+  exposed account and refuses on a mismatch.
+
+### Critical Fixes
+
+- **Account switches were listened for on the wrong transport.** The hook reacted
+  only to the `starkey-*` `window.postMessage` events. Those are the extension's
+  internal page-to-content-script bridge, not its API, and current builds do not
+  deliver an account switch to the page that way — so switching account in Starkey
+  did nothing until the user reloaded. The hook now subscribes to Starkey's
+  documented events (`provider.on('accountChanged' | 'networkChanged' |
+  'disconnect')`), once per mount, with handlers reading live state through refs
+  and `off`/`removeListener` feature-tested on teardown. The window messages stay
+  as a fallback and route into the same handler.
+- **Token revalidation could never succeed.** `signIn()` and
+  `checkAndRevalidateToken()` signed `'Sign message to revalidate login to …'` and
+  `'Token Expiry: …'`, while `create-jwt` verifies exactly one string — so both
+  returned 401 every time and the only recovery was a full reconnect. All call
+  sites now import `AUTH_MESSAGE` from `lib/auth-constants.ts`, and pass
+  `forceSign` so the `isSigningWallet` latch cannot swallow the prompt.
+- **`lib/auth-constants.ts` was shipped in 3.0.0 but nothing imported it.** The
+  hook still had four hardcoded copies of the message and `create-jwt` declared
+  its own fifth. Now genuinely one source of truth; `SKILL.md` Step 4 no longer
+  asks for a five-place find-and-replace.
+
+### Significant Fixes
+
+- **A single `account()` read decided a connected wallet was gone.**
+  `window.starkey` is injected before the extension's background side can answer,
+  so the first read after a page load routinely resolves `[]` on a connected
+  wallet — which signed the user out on every refresh. Added
+  `readStarkeyAccount`: 8 attempts, 250 ms apart, first non-empty wins.
+- **`changeNetwork` was trusted to report what it did.** Starkey's mobile dApp
+  browser rejects it with `Unrecognized chain ID.` *after* performing the switch,
+  so connect failed on mobile with the wallet on the correct chain. New
+  `lib/starkey-network.ts` (`ensureChain`) decides by reading the chain back, and
+  quotes the wallet's rejection text — the only diagnostic available in a browser
+  with no console. Also catches the opposite lie: a call that resolves and
+  changes nothing.
+- **`switchToChain()` was a no-op on first connect.** It guarded on
+  `selectedChainId`, which callers set with `setSelectedChainId()` in the same
+  tick, so React had not committed it when the guard ran. The chain id is now
+  passed as an argument.
+- **Addresses were compared as raw strings.** New `lib/address.ts`
+  (`normalizeAddress`, `sameAddress`) — the extension, Move view responses, JWT
+  claims and `localStorage` disagree about zero-padding and case for the same
+  account, which produced phantom account switches and re-auth loops.
+- **The account-switch handler logged the user out before the new credential
+  existed.** It called `wallet-logout` first, then asked for a signature; a
+  declined prompt left the session gone, wallet state populated, and
+  `resetWalletData()` never called. Now: acquire, swap on success, reset
+  explicitly on failure.
+- **Nothing re-rendered Server Components after a wallet change.** A wallet change
+  is client-side, so any Server Component reading the auth cookie kept rendering
+  the previous wallet's data. New `assets/components/WalletSessionSync.tsx`
+  compares the connected address with the one the page was rendered with and calls
+  `router.refresh()` on divergence. Wired through a new optional
+  `<WalletProvider serverAddress={…}>` prop, so it is one line in the layout
+  rather than a component to remember per page.
+- **The connect modal was a dead end on mobile.** `ConnectWalletHandler` only
+  rendered wallets where `isInstalled` was true, so on a phone — where a browser
+  extension cannot exist at all — the list was empty and the fallback read
+  "Please install a wallet extension". It now shows an **Open in Starkey** row
+  that hands the current URL to Starkey's in-app dApp browser. Handheld detection
+  runs in an effect, not during render, to avoid a hydration mismatch.
+- **Extension detection gave up after five seconds, permanently.** A user who
+  installed Starkey from the app's own prompt, or unlocked a locked wallet a
+  minute later, stayed on the not-installed branch until reload. Detection now
+  polls for as long as the component is mounted, is idempotent so callers cannot
+  stack intervals, and clears on unmount.
+- **Two fast clicks opened two approval popups.** `connectWallet` guarded nothing
+  synchronously — `setLoading(true)` is only visible after React commits. Added an
+  `inFlight` ref covering connect and transaction sends.
+- **An account switch could raise one signature prompt per listener.** Several
+  instances of the hook are alive at once in this template (`WalletProvider` calls
+  it, so does the connect modal) and each subscribes to `accountChanged`; the
+  window-message fallback can report the same switch again. Per-instance state
+  updates are wanted, but the re-auth is a one-time side effect, so it is now
+  claimed through a module-scoped guard keyed on the normalized address.
+- **The account-switch re-auth posted the wrong payload.** It destructured
+  `const { signature } = signResult` and sent only that, while `create-jwt`
+  requires both `signature` and `publicKey` — so every switch answered 400
+  `Invalid signature format`. It now sends the whole `signMessage` result, as the
+  connect path already did.
+
+### Minor Fixes
+
+- `provider.connect()` is now called as `provider.connect({ chainId })`, so the
+  approval sheet opens on the target network. Extensions that ignore the argument
+  drop it; `ensureChain` still runs after either way.
+- The `PRESIGNED_STATE` / `POSTSIGNED_STATE` events carried `accounts[0]` — state
+  that had not committed inside that closure — so consumers received the
+  *previously* connected account, or `undefined` on a first connect. They now
+  carry the account just read.
+- `disconnectWallet` no longer calls `router.push('/')` from inside the hook.
+  Routing is the caller's decision via a new `useSupraMultiWallet({ onDisconnect })`
+  option; the old behaviour yanked users out of modals and nested layouts.
+- `updateBalance` accepts the address to read, so the balance is no longer blank
+  after a first connect (it previously guarded on a not-yet-committed `accounts`).
+
+### Documentation
+
+- **New `references/starkey-runtime-quirks.md`** — the document whose absence
+  caused most of the above. What the extension actually does: which events report
+  an account switch, why the first `account()` comes back empty, why
+  `changeNetwork` lies in the mobile dApp browser, address shapes by source,
+  detection with no natural end, and why a phone browser has no provider at all.
+  Linked from `SKILL.md` as required reading before touching event or network code.
+- **`references/troubleshooting.md`** — eight new entries keyed to the symptom a
+  developer actually searches for, from "switching account does nothing until I
+  reload" to "anyone can obtain a session for an address they do not control".
+- **`SKILL.md`** — the "Key things to remember" entry that described the
+  `starkey-*` window messages as Starkey's event surface has been replaced; it was
+  teaching the defect. Adds the Server Component resync rule, the read-back rule
+  for both things the wallet lies about, and three mandatory test steps (switch
+  account with the page open, reload, connect from the mobile dApp browser) that a
+  desktop-only happy-path test always passes by accident.
+- **`references/hook-api.md`** — options table, the provider event list, and the
+  one-prompt-at-a-time concurrency contract.
+- **`references/no-auth-mode.md`** — now shows which half of the account-switch
+  handler to strip, instead of implying the whole handler can go.
+
+### Known limitations
+
+- Not runtime-verified against every Starkey build. The event transport, the empty
+  first read, and the `changeNetwork` behaviour are grounded in Starkey's docs and
+  in a reproduction in a production dApp, not in a matrix of extension versions.
+- Whether Starkey exposes `off` or `removeListener` is undocumented either way,
+  which is why the subscription feature-tests both and tolerates neither existing.
+- `deriveSupraAddress` covers single-Ed25519 accounts that have not rotated their
+  key. Rotated-key and multi-key accounts cannot sign in without an on-chain
+  authentication key lookup.
+
+---
+
 ## [2.2.0] — April 2026
 
 ### Critical Fixes

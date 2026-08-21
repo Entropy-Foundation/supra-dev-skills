@@ -2,7 +2,7 @@
 
 > A Claude Code plugin that turns Claude into an expert Supra blockchain developer — Move contracts, wallet integration, and the TypeScript SDK, all pre-loaded with verified APIs.
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue)
+![Version](https://img.shields.io/badge/version-3.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Claude](https://img.shields.io/badge/Claude-Code%20Plugin-orange)
 

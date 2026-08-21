@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { WalletType } from '@/hooks/useSupraMultiWallet';
 import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import { isHandheldBrowser, starkeyDappBrowserUrl } from '@/lib/starkey-link';
 import starkeyIcon from '@/public/walletIcons/Starkey.png';
 import ribbitIcon from '@/public/walletIcons/Ribbit.jpg';
 import logo from '@/public/main/icon.png';
@@ -107,6 +108,34 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
   >('idle');
   const [connectionStageStartTime, setConnectionStageStartTime] = useState<number | null>(null);
   const [canClickOutside, setCanClickOutside] = useState(false);
+
+  /**
+   * Whether this is a phone or tablet, where a browser extension cannot exist.
+   *
+   * Read in an effect rather than during render: `navigator` is absent on the
+   * server, and branching the first client render on it would be a hydration
+   * mismatch.
+   */
+  const [isHandheld, setIsHandheld] = useState(false);
+  useEffect(() => {
+    setIsHandheld(isHandheldBrowser());
+  }, []);
+
+  const starkeyInstalled = availableWallets.some(
+    (w) => w.type === 'starkey' && w.isInstalled
+  );
+
+  /**
+   * Hands the current URL to Starkey's in-app dApp browser, which reopens this
+   * page somewhere `window.starkey` exists.
+   *
+   * The page opens fresh in a different browser, so nothing from this one goes
+   * with it - no cookies, no localStorage, no session. Anything behind a login
+   * or a site gate will ask again on the other side.
+   */
+  const openInStarkey = () => {
+    window.location.assign(starkeyDappBrowserUrl(window.location.href));
+  };
 
   // Cache helper function
   const getProfileFromCache = (): ProfileCache | null => {
@@ -514,7 +543,34 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
                     }
                   })}
 
-                  {availableWallets.filter((w) => w.isInstalled).length === 0 && (
+                  {/* A phone browser has no extension to inject window.starkey, so
+                      "install Starkey" is not an instruction anyone can follow
+                      here. Offer the wallet's own dApp browser instead. */}
+                  {isHandheld && !starkeyInstalled && (
+                    <motion.button
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.05, ease: 'easeInOut' }}
+                      onClick={openInStarkey}
+                      className="w-full px-4 py-2 rounded-2xl border border-gray-950/60 hover:border-gray-800/80 bg-gray-950/20 hover:bg-gray-900/40 transition-all duration-300 flex items-center gap-4 group"
+                    >
+                      <div className="flex-shrink-0">{WALLET_INFO.starkey.icon}</div>
+
+                      <div className="flex-1 text-left">
+                        <h3 className="font-medium text-white">Open in Starkey</h3>
+                        <p className="text-sm text-gray-400">
+                          Reopens this page inside the Starkey app
+                        </p>
+                      </div>
+
+                      <div className="flex-shrink-0">
+                        <ExternalLink className="h-4 w-4 text-gray-500" />
+                      </div>
+                    </motion.button>
+                  )}
+
+                  {availableWallets.filter((w) => w.isInstalled).length === 0 &&
+                    !isHandheld && (
                     <div className="text-center py-8">
                       <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
                       <h3 className="text-lg font-semibold text-white mb-2">

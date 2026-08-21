@@ -2,14 +2,28 @@
 
 Every method and state value returned by the hook, with exact types and behavior notes.
 
+## Options
+
+```ts
+const wallet = useSupraMultiWallet({ onDisconnect: () => router.push('/') });
+```
+
+| Option | Type | Notes |
+|---|---|---|
+| `onDisconnect` | `() => void` | Called after the wallet disconnects, or reports no account at all — including a switch to an account that has not approved this site. Optional; the default is to clear wallet state and stay put. |
+
+Routing is deliberately not the hook's decision. Earlier versions called
+`router.push('/')` from inside a wallet event handler, which yanks the user out
+of a modal or a nested layout in any app whose landing route is not `/`.
+
 ## State values
 
 | Name | Type | Notes |
 |---|---|---|
 | `selectedWallet` | `'starkey' \| 'ribbit'` | Currently active wallet. Persisted to localStorage (with sessionStorage + cookie fallback) under the key `multiwallet.selectedWallet`. |
 | `walletCapabilities` | `WalletCapabilities` | Capability flags for the active wallet — see below. Changes when `selectedWallet` changes. |
-| `isExtensionInstalled` | `boolean` | Whether the active wallet's provider is detectable. For Starkey this means `window.starkey?.supra` is defined; for Ribbit it means `initSdk()` returned an SDK instance. Polls every 1s for the first 5s after mount. |
-| `accounts` | `string[]` | Connected addresses. In practice `accounts[0]` is the active one. Empty array when disconnected. Ribbit currently only returns a single Supra address. |
+| `isExtensionInstalled` | `boolean` | Whether the active wallet's provider is detectable. For Starkey this means `window.starkey?.supra` is defined; for Ribbit it means `initSdk()` returned an SDK instance. Polls for as long as the component is mounted — no deadline, because a user may install the extension or unlock a locked wallet minutes after the page opened. |
+| `accounts` | `string[]` | Connected addresses. In practice `accounts[0]` is the active one. Empty array when disconnected. Ribbit currently only returns a single Supra address. **Compare these with `sameAddress` from `lib/address.ts`, never `===`** — padding and case differ by source. For Starkey the value is read with retries, because `account()` answers empty for a moment after every page load on a wallet that is in fact connected. |
 | `networkData` | `{ chainId?: string } \| undefined` | Network info. For Starkey this is the live chain ID; for Ribbit it's mocked from `NEXT_PUBLIC_SUPRA_CHAIN_ID` since Ribbit doesn't expose network switching. |
 | `balance` | `string` | Human-readable balance, e.g. `"12.3456789 SUPRA"`. Updated on connect and via `updateBalance()` internally. |
 | `transactions` | `{ hash: string }[]` | In-memory log of tx hashes from `sendRawTransaction` calls (newest first). Resets on page reload — not persisted. |
@@ -37,10 +51,36 @@ Current values:
 | `accountSwitching` | ✅ | ❌ |
 | `networkSwitching` | ✅ | ❌ (user switches in-app) |
 | `rawTransactions` | ✅ | ✅ |
-| `eventListeners` | ✅ (`starkey-*` window messages) | ❌ |
+| `eventListeners` | ✅ (`provider.on`, plus `starkey-*` window messages as a fallback) | ❌ |
 | `tokenRevalidation` | ✅ | ❌ |
 
 Always check `walletCapabilities.<flag>` before invoking optional paths. The hook itself guards most calls, but custom code built on top of the hook should guard too.
+
+## Starkey events the hook subscribes to
+
+```ts
+provider.on('accountChanged', (accounts: string[]) => {});  // the only account-switch signal
+provider.on('networkChanged', (data) => {});                // data.chainId
+provider.on('disconnect', () => {});                        // site unlinked in the extension
+```
+
+This is Starkey's documented surface. The `starkey-*` `window.postMessage` events
+are its internal page-to-content-script bridge, not its API, and current builds
+do not deliver an account switch that way — they stay wired as a fallback only.
+Both transports route into the same handler, so they cannot disagree.
+
+The subscription is registered once per mount and its handlers read live state
+through refs: `on` is documented but no removal method is, so re-subscribing on
+every state change stacks listeners that nothing can take off again. See
+`references/starkey-runtime-quirks.md`.
+
+## Concurrency
+
+One wallet prompt at a time. `connectWallet()` returns `false` immediately and
+`sendRawTransaction()` throws `Another wallet request is already open` if one is
+already in flight. The guard is a ref, not the `loading` state — that only
+becomes visible to the UI after React commits, which leaves a window wide enough
+for a second click to open a second approval sheet.
 
 ## Methods
 
