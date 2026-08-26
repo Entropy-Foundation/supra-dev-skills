@@ -1,6 +1,6 @@
 ---
 name: supra-multiwallet-skill
-description: Integrate Starkey and Ribbit wallet connect authentication for the Supra blockchain into a Next.js app. Use this skill whenever the user wants to add Supra wallet support, connect Starkey or Ribbit wallets, build a "connect wallet" button/modal for Supra, sign messages or send transactions via a Supra wallet, implement wallet-based JWT auth for a Supra dApp, or add multiwallet support to an existing Supra project -- even if they don't explicitly say "multiwallet" and only mention one wallet (Starkey or Ribbit). Also use this when migrating a single-wallet Supra integration to support both wallets, or when setting up protected routes gated by Supra wallet sign-in.
+description: Integrate Starkey and Ribbit wallet connect authentication for the Supra blockchain into a Next.js app. Use this skill whenever the user wants to add Supra wallet support, connect Starkey or Ribbit wallets, build a "connect wallet" button/modal for Supra, sign messages or send transactions via a Supra wallet, implement wallet-based JWT auth for a Supra dApp, or add multiwallet support to an existing Supra project -- even if they don't explicitly say "multiwallet" and only mention one wallet (Starkey or Ribbit). Also use this when migrating a single-wallet Supra integration to support both wallets, or when setting up protected routes gated by Supra wallet sign-in. Use it as well for SupraNS (Supra Name Service) name display -- resolving a connected wallet address to its ".supra" name so the UI shows "alice.supra" instead of "0x944f...", reverse lookup via the SupraNS router contract, or any request to show a username/domain instead of a wallet address on Supra.
 ---
 
 # Supra Multiwallet Integration
@@ -17,6 +17,7 @@ After running, the target project will have:
 - Both **Starkey** (browser extension, injected into `window.starkey.supra`) and **Ribbit** (via `ribbit-wallet-connect` SDK) supported through a single unified API
 - Optionally: a full **sign-in-with-wallet → JWT → httpOnly cookie** auth flow with nonce/signature verification and edge-runtime API routes
 - Optionally: a drop-in `ConnectWalletHandler` + modal for the connect UI
+- Optionally: **SupraNS** name display — the connected address renders as `alice.supra` when the account has a primary name, falling back to the shortened address otherwise (`references/suprans-resolution.md`)
 
 ## Step 1: Understand the target project
 
@@ -79,6 +80,19 @@ rejects `changeNetwork` *after* performing the switch.
 |---|---|
 | `assets/lib/starkey-link.ts` | `lib/starkey-link.ts` |
 
+**Copy if the app should display SupraNS names instead of raw addresses:**
+
+| From | To |
+|---|---|
+| `assets/lib/suprans.ts` | `lib/suprans.ts` |
+| `assets/hooks/useSupraName.ts` | `hooks/useSupraName.ts` |
+
+Genuinely optional — nothing else in the skill imports them. `lib/suprans.ts` depends on
+`lib/address.ts`, which is already in the always-copy list. Read
+`references/suprans-resolution.md` before wiring these up; the resolution path is not
+the one the SupraNS docs imply, and pointing at the wrong network address fails silently
+rather than erroring.
+
 **Copy if using the provided modal UI:**
 
 | From | To |
@@ -117,6 +131,12 @@ Several values in the copied files are hardcoded to the reference project and **
 **In `hooks/useSupraMultiWallet.ts`:**
 - The Ribbit `dappMetadata` object (`name: 'multiwallet'`, `description: 'NFT Marketplace and Lootbox Platform'`) should be updated to describe the target dApp.
 - `STORAGE_KEY = 'multiwallet.selectedWallet'` — optional, but namespacing it to the project (e.g. `'myapp.selectedWallet'`) avoids collisions if the user visits multiple Supra dApps.
+
+**In `lib/suprans.ts` (if using SupraNS):**
+- Nothing to replace — but `NEXT_PUBLIC_SUPRA_CHAIN_ID` now also selects the SupraNS
+  router address, and it is unset-defaults-to-testnet. A mainnet app that leaves it
+  unset resolves *every* account to "no name" with nothing logged, because the testnet
+  router address returns `404` on mainnet RPC. Set it to `"8"` for mainnet.
 
 **In `components/ConnectWalletHandler.tsx` (if using it):**
 - Image imports at the top reference `@/public/walletIcons/Starkey.png`, `@/public/walletIcons/Ribbit.jpg`, and `@/public/main/icon.png`. The user must either (a) download these icons from the reference repo's `public/` directory, (b) provide their own, or (c) replace the `<img>` tags with inline SVGs. Don't leave broken image references.
@@ -293,6 +313,7 @@ Load these on demand (don't read them all upfront):
 - **`references/no-auth-mode.md`** — how to strip the JWT auth out of the hook if the project only needs wallet connection (no sign-in). Read when the user explicitly says they don't want sign-in or when integrating into a read-only dApp.
 - **`references/using-connect-wallet-handler.md`** — how to use `ConnectWalletHandler` as a render-prop wrapper, customize the modal, and handle `onConnect`/`onDisconnect` callbacks.
 - **`references/migrating-from-single-wallet.md`** — how to migrate an existing Starkey-only (or Ribbit-only) project to support both. Read when the project already has wallet code.
+- **`references/suprans-resolution.md`** — resolving a wallet address to its SupraNS name (`alice.supra`) for display: the router contract addresses per network, the `get_primary_name` view and its `(subdomain, domain)` return order, Move `Option` JSON encoding, why the published SupraNS docs can't be implemented from, and why the name must never be trusted for identity. Read before copying `lib/suprans.ts` or debugging "every account shows no name".
 - **`references/troubleshooting.md`** — common failures (signature verification failing, Ribbit not initializing, infinite "connecting" state, CORS on edge routes) and their fixes.
 
 ---
@@ -303,6 +324,7 @@ Load these on demand (don't read them all upfront):
 - **Starkey reports an account switch through `provider.on('accountChanged')`.** That, plus `networkChanged` and `disconnect`, is the documented event surface. The `starkey-*` `window.postMessage` events are the extension's internal page-to-content-script bridge, **not its API**, and current builds do not deliver an account switch to the page that way. Never make those messages the only listener: a project that does keeps rendering the previous wallet until the page is reloaded. No removal method is documented, so subscribe once per mount, read live state through refs inside the handlers, and feature-test `off`/`removeListener` on teardown.
 - **A wallet change does not re-render Server Components.** The auth cookie changed, but the RSC payload is not re-fetched. Mount `WalletSessionSync` wherever a Server Component reads the session, or the screen keeps showing the previous wallet's data with correct client state behind it.
 - **The wallet lies about two things, so verify by reading back.** `account()` answers empty for a moment after every page load on a wallet that is connected — retry before believing it. `changeNetwork` rejects *after* switching in the mobile dApp browser — read the chain back and let that decide, never the call's own answer.
+- **A SupraNS name is a label, not an identity.** Names are transferable NFTs, so the same `alice.supra` can belong to a different account tomorrow. Resolve it for display only, always keep the real address reachable next to it, never write it into the JWT, and never compare names to decide auth. `sameAddress` stays the only identity check.
 - **Compare addresses through `sameAddress`, never `===`.** The extension, Move view responses, JWT claims and `localStorage` disagree about zero-padding and case for the same account.
 - **The sign-in message lives in one file.** `lib/auth-constants.ts` exports `AUTH_MESSAGE`; every client call site and the `create-jwt` route import it. Sign that same string on revalidation too — the server verifies exactly one message, so a "revalidate" variant can never verify.
 - **A valid signature is not proof of an address.** `nacl.sign.detached.verify` only proves the caller holds the key they sent you. `verifyWalletSignature` also derives that public key back to an address (`sha3_256(pubkey || 0x00)`) and compares it with the claimed one. Removing that second step turns the login route into an authentication bypass.
