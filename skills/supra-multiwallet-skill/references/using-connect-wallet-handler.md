@@ -1,6 +1,6 @@
 # Using `ConnectWalletHandler`
 
-`ConnectWalletHandler` is a render-prop wrapper that gives you a "Connect Wallet" button with a full wallet-selection modal, connection stage indicators ("Waiting for wallet", "Sign to verify", etc.), and balance/account management — all pre-wired to `useSupraMultiWallet`.
+`ConnectWalletHandler` is a render-prop wrapper that gives you a "Connect Wallet" button with a modal carrying the install / mobile-deep-link states, connection stage indicators ("Waiting for Starkey Wallet", "Sign to verify", etc.), and balance/account management — all pre-wired to `useSupraMultiWallet`.
 
 Use it when you want the reference project's UX as-is. Skip it and call the hook directly when you want to build your own UI.
 
@@ -52,7 +52,7 @@ You control the trigger UI; the modal and its state machine are internal.
 
 The modal displays different content based on an internal `connectionStage` state:
 
-- `idle` — wallet selection list
+- `idle` — the connect row (or the install / Open-in-Starkey fallback)
 - `connecting` — "Waiting for [Wallet]" with a spinner; wallet approval pending
 - `signing` — "Sign to verify"; signature prompt up
 - `success` — "Connected to [Wallet]"; closes after 2.5s
@@ -63,17 +63,16 @@ These stages are driven by the `presigned-state`, `postsigned-state`, and `walle
 
 ## Required assets
 
-`ConnectWalletHandler.tsx` references three images:
+`ConnectWalletHandler.tsx` references two images:
 
 ```tsx
 import starkeyIcon from '@/public/walletIcons/Starkey.png';
-import ribbitIcon from '@/public/walletIcons/Ribbit.jpg';
 import logo from '@/public/main/icon.png';
 ```
 
 You need to either:
 1. Copy these icons from the reference repo's `public/walletIcons/` and `public/main/` directories into your own `public/`
-2. Replace `logo` with your own brand logo import and the wallet icons with your own hosted versions
+2. Replace `logo` with your own brand logo import and the wallet icon with your own hosted version
 3. Replace the `<img>` tags with inline SVGs (removes the static import dependency entirely)
 
 Also update the display strings that reference the reference project's branding:
@@ -106,6 +105,6 @@ If any of these apply, building your own modal directly on top of `useSupraMulti
 - Your project doesn't use shadcn/ui, framer-motion, or sonner
 - You have your own design system with established dialog patterns
 - You want programmatic control (e.g. auto-connect if previously used) without modal UI
-- You only support one wallet (no selection step needed)
+- You don't need the install / mobile-deep-link states the modal carries
 
-In that case, read `hook-api.md` and use the `getAvailableWallets` + `connectWallet(type)` + `WALLET_EVENTS` pieces directly.
+In that case, read `hook-api.md` and use the `isExtensionInstalled` + `connectWallet()` + `WALLET_EVENTS` pieces directly.

@@ -1,66 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
-import nacl from 'tweetnacl';
-import { ethers } from 'ethers';
-import { Toaster } from '@/components/ui/sonner';
-import { toast } from 'sonner';
-import useMoveLangConversionUtils from '@/hooks/useConversionUtils';
-import { AUTH_MESSAGE } from '@/lib/auth-constants';
 import { normalizeAddress, sameAddress } from '@/lib/address';
+import { AUTH_MESSAGE } from '@/lib/auth-constants';
 import { ensureChain } from '@/lib/starkey-network';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import nacl from 'tweetnacl';
 
-// Import types from ribbit-connect package
-import {
-  type DappMetadata,
-  type WalletBalanceRequest,
-  type RawTransactionResponse,
-  type SignMessageResponse,
-  type RawTxnRequest,
-  SupraChainId,
-  BCS,
-  type WalletInfo,
-  initSdk,
-  type RibbitWalletSDK,
-} from 'ribbit-wallet-connect';
-
-// Define wallet types
-export type WalletType = 'starkey' | 'ribbit';
-
-// Define wallet capabilities interface
-interface WalletCapabilities {
-  signMessage: boolean;
-  accountSwitching: boolean;
-  networkSwitching: boolean;
-  rawTransactions: boolean;
-  eventListeners: boolean;
-  tokenRevalidation: boolean;
-}
-
-// Wallet configuration
-const WALLET_CONFIGS = {
-  starkey: {
-    capabilities: {
-      signMessage: true,
-      accountSwitching: true,
-      networkSwitching: true,
-      rawTransactions: true,
-      eventListeners: true,
-      tokenRevalidation: true,
-    },
-    provider: () =>
-      typeof window !== 'undefined' && (window as any)?.starkey?.supra,
-  },
-  ribbit: {
-    capabilities: {
-      signMessage: true,
-      accountSwitching: false, // Ribbit doesn't support account switching
-      networkSwitching: false, // Ribbit network switching happens in-app
-      rawTransactions: true,
-      eventListeners: false,
-      tokenRevalidation: false, // Ribbit doesn't support token revalidation
-    },
-    provider: () => initSdk(),
-  },
-} as const;
+/**
+ * The Starkey provider as it exists right now, not as state remembers it.
+ *
+ * The extension injects `window.starkey` after page scripts run, so anything
+ * that captured the provider at module load or at first render can be holding
+ * `null` long after the wallet became available.
+ */
+const getStarkeyProvider = () =>
+  (typeof window !== 'undefined' && (window as any)?.starkey?.supra) || null;
 
 // Wallet events for communication with the parent window
 export const WALLET_EVENTS = {
@@ -69,17 +22,6 @@ export const WALLET_EVENTS = {
   POSTSIGNED_STATE: 'postsigned-state',
   ERROR: 'wallet-error',
 } as const;
-
-// Get cookie function
-const getCookie = (name: string) => {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie
-    .split('; ')
-    .find((r) => r.startsWith(name + '='));
-  return match
-    ? decodeURIComponent(match.split('=').slice(1).join('='))
-    : null;
-};
 
 /**
  * The chain this dApp runs on, as a string. "6" = testnet, "8" = mainnet.
@@ -139,109 +81,6 @@ const readStarkeyAccount = async (
  */
 let switchInFlight: string | null = null;
 
-// Storage utility functions
-const STORAGE_KEY = 'multiwallet.selectedWallet';
-
-const setStoredWalletType = (walletType: WalletType) => {
-  try {
-    // Try localStorage first
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(STORAGE_KEY, walletType);
-      return;
-    }
-  } catch (e) {
-    console.warn('localStorage not available');
-  }
-
-  try {
-    // Fallback to sessionStorage
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      sessionStorage.setItem(STORAGE_KEY, walletType);
-      return;
-    }
-  } catch (e) {
-    console.warn('sessionStorage not available');
-  }
-
-  try {
-    // Fallback to cookie
-    if (typeof document !== 'undefined') {
-      document.cookie = `${STORAGE_KEY}=${walletType}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-      return;
-    }
-  } catch (e) {
-    console.warn('cookies not available');
-  }
-};
-
-const getStoredWalletType = (): WalletType => {
-  if (typeof window === 'undefined') return 'starkey';
-
-  try {
-    // Try localStorage first
-    if (window.localStorage) {
-      const stored = localStorage.getItem(STORAGE_KEY) as WalletType;
-      if (stored && ['starkey', 'ribbit'].includes(stored)) {
-        return stored;
-      }
-    }
-  } catch (e) {
-    console.warn('localStorage read failed');
-  }
-
-  try {
-    // Fallback to sessionStorage
-    if (window.sessionStorage) {
-      const stored = sessionStorage.getItem(STORAGE_KEY) as WalletType;
-      if (stored && ['starkey', 'ribbit'].includes(stored)) {
-        return stored;
-      }
-    }
-  } catch (e) {
-    console.warn('sessionStorage read failed');
-  }
-
-  try {
-    // Fallback to cookie
-    if (typeof document !== 'undefined') {
-      const stored = getCookie(STORAGE_KEY) as WalletType;
-      if (stored && ['starkey', 'ribbit'].includes(stored)) {
-        return stored;
-      }
-    }
-  } catch (e) {
-    console.warn('cookie read failed');
-  }
-
-  return 'starkey'; // Default fallback
-};
-
-const clearStoredWalletType = () => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  } catch (e) {
-    // Silent fail
-  }
-
-  try {
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
-  } catch (e) {
-    // Silent fail
-  }
-
-  try {
-    if (typeof document !== 'undefined') {
-      document.cookie = `${STORAGE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-    }
-  } catch (e) {
-    // Silent fail
-  }
-};
-
 export type UseSupraMultiWalletOptions = {
   /**
    * Called after the wallet disconnects, or reports no account at all.
@@ -261,19 +100,7 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   const onDisconnectRef = useRef(options.onDisconnect);
   onDisconnectRef.current = options.onDisconnect;
 
-  // Initialize wallet selection from storage
-  const [selectedWallet, setSelectedWallet] = useState<WalletType>(getStoredWalletType);
-  const [walletCapabilities, setWalletCapabilities] = useState<WalletCapabilities>(
-    WALLET_CONFIGS[getStoredWalletType()].capabilities
-  );
-
-  // Provider states (keep separate for compatibility)
-  const [supraProvider, setSupraProvider] = useState<any>(
-    WALLET_CONFIGS.starkey.provider()
-  );
-  const [ribbitProvider, setRibbitProvider] = useState<RibbitWalletSDK | null>(
-    WALLET_CONFIGS.ribbit.provider()
-  );
+  const [supraProvider, setSupraProvider] = useState<any>(getStarkeyProvider);
 
   // Existing states
   const [isExtensionInstalled, setIsExtensionInstalled] =
@@ -309,12 +136,6 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     accountsRef.current = accounts;
   }, [accounts]);
 
-  /** Same reason as accountsRef: the provider subscription outlives this value. */
-  const selectedWalletRef = useRef<WalletType>(selectedWallet);
-  useEffect(() => {
-    selectedWalletRef.current = selectedWallet;
-  }, [selectedWallet]);
-
   /** Holds the extension-detection poll so it is started once and stopped on unmount. */
   const detectTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -322,53 +143,15 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     setTransactions((prev) => [{ hash }, ...prev]);
   };
 
-  // Get current wallet provider
-  const getCurrentProvider = () => {
-    switch (selectedWallet) {
-      case 'starkey': {
-        return supraProvider;
-      }
-      case 'ribbit': {
-        return ribbitProvider;
-      }
-      default: {
-        return supraProvider;
-      }
-    }
-  };
+  /** Escape hatch for callers that need the raw Starkey provider object. */
+  const getCurrentProvider = () => supraProvider;
 
   // Check if extension is installed
   const checkExtensionInstalled = async () => {
-    switch (selectedWallet) {
-      case 'starkey': {
-        const provider = WALLET_CONFIGS.starkey.provider();
-        setSupraProvider(provider);
-        setIsExtensionInstalled(!!provider);
-        return !!provider;
-      }
-      case 'ribbit': {
-        const provider = WALLET_CONFIGS.ribbit.provider();
-        if (!provider) {
-          setRibbitProvider(null);
-          setIsExtensionInstalled(false);
-          return false;
-        }
-
-        try {
-          setRibbitProvider(provider);
-          setIsExtensionInstalled(true);
-          return true;
-        } catch (error) {
-          console.error('Error checking Ribbit wallet readiness:', error);
-          setRibbitProvider(null);
-          setIsExtensionInstalled(false);
-          return false;
-        }
-      }
-      default: {
-        return false;
-      }
-    }
+    const provider = getStarkeyProvider();
+    setSupraProvider(provider);
+    setIsExtensionInstalled(!!provider);
+    return !!provider;
   };
 
   // Initial provider setup
@@ -377,44 +160,17 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     if (isExtensionInstalled) {
       updateAccounts();
     }
-  }, [selectedWallet, isExtensionInstalled]);
-
-  // Extension detection effect
-  useEffect(() => {
-    const checkExtension = async () => {
-      return await checkExtensionInstalled();
-    };
-
-    // Initial check
-    checkExtension().then((isInstalled) => {
-      if (isInstalled && selectedWallet === 'ribbit') {
-        updateAccounts();
-      }
-    });
-
-    // Keep polling until the wallet shows up. No deadline: a user who reads the
-    // "install Starkey" prompt, installs it and comes back - or who simply
-    // unlocks a locked wallet a minute later - would otherwise stay on the
-    // not-installed branch until they reload the page.
-    const intv = setInterval(async () => {
-      const isInstalled = await checkExtension();
-      if (isInstalled) {
-        clearInterval(intv);
-        if (selectedWallet === 'ribbit') {
-          updateAccounts();
-        }
-      }
-    }, 1000);
-
-    return () => clearInterval(intv);
-  }, [selectedWallet]);
+  }, [isExtensionInstalled]);
 
   /**
    * Starts (or leaves running) the extension-detection poll.
    *
-   * Idempotent, so the several callers cannot stack intervals, and without a
-   * deadline for the same reason as the effect above: detection that backs a
-   * permanent UI state has to keep looking for as long as the component lives.
+   * Idempotent, so the several callers cannot stack intervals, and deliberately
+   * without a deadline: detection that backs a permanent UI state has to keep
+   * looking for as long as the component lives. A user who reads the "install
+   * Starkey" prompt, installs it and comes back - or who simply unlocks a locked
+   * wallet a minute later - would otherwise stay on the not-installed branch
+   * until they reload the page.
    */
   const checkIsExtensionInstalled = () => {
     if (detectTimer.current) return;
@@ -443,51 +199,22 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     if (!provider) return;
 
     try {
-      switch (selectedWallet) {
-        case 'starkey': {
-          // Retried, not read once: see readStarkeyAccount. A single empty read
-          // here is what signs the user out every time they refresh.
-          const walletAccount = await readStarkeyAccount(provider);
-          setAccounts(walletAccount ? [walletAccount] : []);
-          if (walletAccount) {
-            localStorage.setItem('starkey.accounts.0', walletAccount);
-          } else {
-            localStorage.removeItem('starkey.accounts.0');
-          }
-          // Passed explicitly: `accounts` has not committed yet in this tick, so
-          // updateBalance would read the previous value and blank the balance.
-          await updateBalance(walletAccount ?? undefined);
-          await getNetworkData();
-          break;
-        }
-        case 'ribbit': {
-          // Connect to wallet and get current walletAddress. Currently it will return only supra address(string). In future it will return other chain address as well or may be an array of addresses with their chain types({walletAddress: string; chain: string;}).
-          const wallet = provider.getWalletInfo();
-          if (wallet?.connected) {
-            setAccounts([wallet.walletAddress]);
-            await updateBalance(wallet.walletAddress);
-          } else {
-            setAccounts(["0xnotconnected"]);
-          }
-          break;
-        }
-        default: {
-          setAccounts([]);
-          break;
-        }
+      // Retried, not read once: see readStarkeyAccount. A single empty read
+      // here is what signs the user out every time they refresh.
+      const walletAccount = await readStarkeyAccount(provider);
+      setAccounts(walletAccount ? [walletAccount] : []);
+      if (walletAccount) {
+        localStorage.setItem('starkey.accounts.0', walletAccount);
+      } else {
+        localStorage.removeItem('starkey.accounts.0');
       }
-    } catch (error) {
+      // Passed explicitly: `accounts` has not committed yet in this tick, so
+      // updateBalance would read the previous value and blank the balance.
+      await updateBalance(walletAccount ?? undefined);
+      await getNetworkData();
+    } catch {
       setAccounts([]);
-      switch (selectedWallet) {
-        case 'starkey': {
-          localStorage.removeItem('starkey.accounts.0');
-          break;
-        }
-        case 'ribbit': {
-          // Reset ribbit session
-          break;
-        }
-      }
+      localStorage.removeItem('starkey.accounts.0');
     }
   };
 
@@ -505,30 +232,9 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     }
 
     try {
-      switch (selectedWallet) {
-        case 'starkey': {
-          const balance = await provider.balance();
-          if (balance) {
-            setBalance(`${balance.formattedBalance} ${balance.displayUnit}`);
-          }
-          break;
-        }
-        case 'ribbit': {
-          const walletBalanceRequest: WalletBalanceRequest = {
-            chainId: parseInt(process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID || '6'),
-            resourceType: '0x1::supra_coin::SupraCoin',
-            decimals: 7,
-          };
-          const balanceStr = await provider.getWalletBalance(
-            walletBalanceRequest
-          );
-          setBalance(`${balanceStr.balance || 0} SUPRA`);
-          break;
-        }
-        default: {
-          setBalance('');
-          break;
-        }
+      const balance = await provider.balance();
+      if (balance) {
+        setBalance(`${balance.formattedBalance} ${balance.displayUnit}`);
       }
     } catch (error) {
       console.error('Error updating balance:', error);
@@ -541,26 +247,9 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     if (!provider) return;
 
     try {
-      switch (selectedWallet) {
-        case 'starkey': {
-          const data = await provider.getChainId();
-          setNetworkData(data || {});
-          return data;
-        }
-        case 'ribbit': {
-          // Ribbit doesn't have network switching, assume current chain
-          const chainId = parseInt(
-            process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID || '6'
-          );
-          const mockNetworkData = { chainId: chainId.toString() };
-          setNetworkData(mockNetworkData);
-          return mockNetworkData;
-        }
-        default: {
-          setNetworkData({});
-          return {};
-        }
-      }
+      const data = await provider.getChainId();
+      setNetworkData(data || {});
+      return data;
     } catch (error) {
       console.error('Error getting network data:', error);
       setNetworkData({});
@@ -568,21 +257,14 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     }
   };
 
-  const connectWallet = async (walletType?: WalletType) => {
-    // Update wallet selection if provided
-    if (walletType) {
-      updateSelectedWallet(walletType);
-    }
-
-    const provider = walletType
-      ? WALLET_CONFIGS[walletType].provider()
-      : getCurrentProvider();
+  const connectWallet = async () => {
+    // Read fresh, not from state: the extension can have injected since this
+    // component mounted, and `supraProvider` only catches up on the next poll.
+    const provider = getStarkeyProvider();
 
     if (!provider) {
-      toast('Extension not installed',  {
-        description: `Please install the ${
-          walletType || selectedWallet
-        } extension`,
+      toast('Extension not installed', {
+        description: 'Please install the Starkey extension',
       });
       return false;
     }
@@ -594,202 +276,103 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     setLoading(true);
 
     try {
-      switch (walletType || selectedWallet) {
-        case 'starkey': {
-          // Passing the target chain opens the approval sheet on the right
-          // network. Starkey ships no types and its docs describe no argument
-          // here; an extension that ignores it simply drops the extra argument,
-          // which is why ensureChain still runs below either way.
-          const approved: string[] | undefined = await provider.connect({
-            chainId: TARGET_CHAIN_ID,
-          });
+      // Passing the target chain opens the approval sheet on the right
+      // network. Starkey ships no types and its docs describe no argument
+      // here; an extension that ignores it simply drops the extra argument,
+      // which is why ensureChain still runs below either way.
+      const approved: string[] | undefined = await provider.connect({
+        chainId: TARGET_CHAIN_ID,
+      });
 
-          // The approval itself carries the account. Reading it back - retried -
-          // is the fallback for a wallet that answers `connect` with nothing
-          // useful, the mobile dApp browser among them.
-          const walletAccount =
-            approved?.[0] ?? (await readStarkeyAccount(provider, 4));
+      // The approval itself carries the account. Reading it back - retried -
+      // is the fallback for a wallet that answers `connect` with nothing
+      // useful, the mobile dApp browser among them.
+      const walletAccount =
+        approved?.[0] ?? (await readStarkeyAccount(provider, 4));
 
-          if (!walletAccount) {
-            throw new Error('No account found');
-          }
-
-          const responseAcc = [walletAccount];
-
-          {
-            localStorage.setItem('isSigningWallet', 'false');
-
-            localStorage.setItem('starkey.accounts.0', responseAcc[0]);
-            setAccounts(responseAcc);
-
-            window.dispatchEvent(
-              new CustomEvent(WALLET_EVENTS.PRESIGNED_STATE, {
-                detail: {
-                  timestamp: Date.now(),
-                  // The account just read, not the state variable - that has not
-                  // committed inside this closure, so `accounts[0]` here is the
-                  // previously connected account, or undefined on first connect.
-                  account: responseAcc[0],
-                },
-              })
-            );
-
-            // Network validation. ensureChain decides by reading the chain back
-            // rather than trusting changeNetwork to report what it did; see
-            // lib/starkey-network.ts.
-            //
-            // The previous version called switchToChain() immediately after
-            // setSelectedChainId(), and switchToChain guarded on that state -
-            // which React had not committed yet - so on a first connect the
-            // switch silently did nothing at all.
-            const landedOn = await ensureChain(provider, TARGET_CHAIN_ID);
-            setSelectedChainId(landedOn);
-            setNetworkData({ chainId: landedOn });
-
-            // Authentication flow. AUTH_MESSAGE is the single source of truth
-            // shared with app/api/auth/create-jwt - the server verifies it
-            // byte-for-byte, so a local copy of the string here is a silent 401
-            // waiting to happen.
-            const nonce = await fetch('/api/auth/nonce').then((r) => r.text());
-            const signature = await signMessage(
-              AUTH_MESSAGE,
-              nonce,
-              responseAcc[0]
-            );
-
-            if (!signature) {
-              throw new Error('Message signing was declined');
-            }
-
-            window.dispatchEvent(
-              new CustomEvent(WALLET_EVENTS.POSTSIGNED_STATE, {
-                detail: {
-                  timestamp: Date.now(),
-                  account: responseAcc[0],
-                },
-              })
-            );
-
-            const response = await fetch('/api/auth/create-jwt', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                address: responseAcc[0],
-                signature,
-                nonce,
-              }),
-            });
-
-            const { token } = await response.json();
-
-            await fetch('/api/auth/wallet-login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token }),
-            });
-
-            // Dispatch connection event
-            window.dispatchEvent(
-              new CustomEvent(WALLET_EVENTS.CONNECTED, {
-                detail: {
-                  timestamp: Date.now(),
-                  account: responseAcc[0],
-                  wallet: 'starkey',
-                },
-              })
-            );
-          }
-          break;
-        }
-        case 'ribbit': {
-
-          const dappMetadata: DappMetadata = {
-            name: 'multiwallet',
-            description: 'NFT Marketplace and Lootbox Platform',
-            logo: window.location.origin + '/favicon.ico',
-            url: window.location.origin,
-          };
-
-          const response: WalletInfo = await provider.connectToWallet(
-            dappMetadata
-          );
-
-          if(response.walletAddress == null) {
-            throw new Error('No account found');
-          }
-
-          if (response?.connected) {
-            await updateAccounts();
-
-            if (response.walletAddress) {
-              localStorage.setItem('isSigningWallet', 'false');
-
-              window.dispatchEvent(
-                new CustomEvent(WALLET_EVENTS.PRESIGNED_STATE, {
-                  detail: {
-                    timestamp: Date.now(),
-                    account: response.walletAddress, // Fixed: was accounts[0]
-                  },
-                })
-              );
-
-              // Authentication flow - matching Starkey exactly
-              const nonce = await fetch('/api/auth/nonce').then((r) => r.text());
-              const signature = await signMessage(
-                AUTH_MESSAGE,
-                nonce,
-                response.walletAddress
-              );
-
-              window.dispatchEvent(
-                new CustomEvent(WALLET_EVENTS.POSTSIGNED_STATE, {
-                  detail: {
-                    timestamp: Date.now(),
-                    account: response.walletAddress, // Fixed: was accounts[0]
-                  },
-                })
-              );
-
-              const responseAuth = await fetch('/api/auth/create-jwt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  address: response.walletAddress,
-                  signature,
-                  nonce, // Fixed: was Date.now()
-                }),
-              });
-  
-              const { token } = await responseAuth.json();
-
-              await fetch('/api/auth/wallet-login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token }),
-              });
-
-              // Dispatch connection event
-              window.dispatchEvent(
-                new CustomEvent(WALLET_EVENTS.CONNECTED, {
-                  detail: {
-                    timestamp: Date.now(),
-                    account: response.walletAddress,
-                    wallet: 'ribbit',
-                  },
-                })
-              );
-            }
-          } else {
-            throw new Error('Connection rejected');
-          }
-          break;
-        }
-        default: {
-          throw new Error(
-            `Unsupported wallet: ${walletType || selectedWallet}`
-          );
-        }
+      if (!walletAccount) {
+        throw new Error('No account found');
       }
+
+      const responseAcc = [walletAccount];
+
+      localStorage.setItem('isSigningWallet', 'false');
+
+      localStorage.setItem('starkey.accounts.0', responseAcc[0]);
+      setAccounts(responseAcc);
+
+      window.dispatchEvent(
+        new CustomEvent(WALLET_EVENTS.PRESIGNED_STATE, {
+          detail: {
+            timestamp: Date.now(),
+            // The account just read, not the state variable - that has not
+            // committed inside this closure, so `accounts[0]` here is the
+            // previously connected account, or undefined on first connect.
+            account: responseAcc[0],
+          },
+        })
+      );
+
+      // Network validation. ensureChain decides by reading the chain back
+      // rather than trusting changeNetwork to report what it did; see
+      // lib/starkey-network.ts.
+      //
+      // The previous version called switchToChain() immediately after
+      // setSelectedChainId(), and switchToChain guarded on that state -
+      // which React had not committed yet - so on a first connect the
+      // switch silently did nothing at all.
+      const landedOn = await ensureChain(provider, TARGET_CHAIN_ID);
+      setSelectedChainId(landedOn);
+      setNetworkData({ chainId: landedOn });
+
+      // Authentication flow. AUTH_MESSAGE is the single source of truth
+      // shared with app/api/auth/create-jwt - the server verifies it
+      // byte-for-byte, so a local copy of the string here is a silent 401
+      // waiting to happen.
+      const nonce = await fetch('/api/auth/nonce').then((r) => r.text());
+      const signature = await signMessage(AUTH_MESSAGE, nonce, responseAcc[0]);
+
+      if (!signature) {
+        throw new Error('Message signing was declined');
+      }
+
+      window.dispatchEvent(
+        new CustomEvent(WALLET_EVENTS.POSTSIGNED_STATE, {
+          detail: {
+            timestamp: Date.now(),
+            account: responseAcc[0],
+          },
+        })
+      );
+
+      const response = await fetch('/api/auth/create-jwt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: responseAcc[0],
+          signature,
+          nonce,
+        }),
+      });
+
+      const { token } = await response.json();
+
+      await fetch('/api/auth/wallet-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+
+      // Dispatch connection event
+      window.dispatchEvent(
+        new CustomEvent(WALLET_EVENTS.CONNECTED, {
+          detail: {
+            timestamp: Date.now(),
+            account: responseAcc[0],
+            wallet: 'starkey',
+          },
+        })
+      );
 
       return true;
     } catch (error) {
@@ -815,28 +398,14 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     if (!provider) return;
 
     try {
-      switch (selectedWallet) {
-        case 'starkey': {
-          await provider.disconnect();
-          await fetch('/api/auth/wallet-logout', { method: 'POST' });
-          break;
-        }
-        case 'ribbit': {
-          await provider.disconnect();
-          // any further clean up required do that.
-          break;
-        }
-      }
+      await provider.disconnect();
+      await fetch('/api/auth/wallet-logout', { method: 'POST' });
 
       resetWalletData();
-      // Clear wallet selection on disconnect
-      clearStoredWalletType();
       onDisconnectRef.current?.();
     } catch (error) {
       console.error('Disconnect error:', error);
       resetWalletData();
-      // Clear wallet selection on error too
-      clearStoredWalletType();
     }
   };
 
@@ -845,17 +414,8 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     setBalance('');
     setNetworkData({});
 
-    switch (selectedWallet) {
-      case 'starkey': {
-        localStorage.setItem('isSigningWallet', 'false');
-        localStorage.removeItem('starkey.accounts.0');
-        break;
-      }
-      case 'ribbit': {
-        // Any required clean up
-        break;
-      }
-    }
+    localStorage.setItem('isSigningWallet', 'false');
+    localStorage.removeItem('starkey.accounts.0');
   };
 
   // THis is just an example about fetching sequence number. To be used in sendTRansaction. In case you want this function to be added in sdk I can do that. 
@@ -895,105 +455,49 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     inFlight.current = true;
 
     try {
-      switch (selectedWallet) {
-        case 'starkey': {
-          if (!walletCapabilities.rawTransactions) {
-            throw new Error('Raw transactions not supported by current wallet');
-          }
-
-          // Never sign as an account the session did not authenticate.
-          //
-          // `accounts[0]` is the address the JWT was issued for. If the user
-          // switched account in the extension and the re-auth that follows
-          // failed or was rejected, the wallet is on a different key than the
-          // session claims - and signing anyway means the chain sees account B
-          // while every server-side check reasons about account A.
-          const exposed = await readStarkeyAccount(provider, 2);
-          if (exposed && !sameAddress(exposed, accounts[0])) {
-            throw new Error(
-              'Starkey is on a different account than this session - reconnect to continue.'
-            );
-          }
-          const sender = accounts[0];
-
-          // Decided by reading the chain back, not by whether changeNetwork
-          // resolved. See lib/starkey-network.ts.
-          const landedOn = await ensureChain(provider, TARGET_CHAIN_ID);
-          setSelectedChainId(landedOn);
-          setNetworkData({ chainId: landedOn });
-
-          const rawTxPayload = [
-            sender,
-            0, // sequence number
-            moduleAddress,
-            moduleName,
-            functionName,
-            runTimeParams,
-            params,
-            {},
-          ];
-
-          const data = await provider.createRawTransactionData(rawTxPayload);
-          const txHash = await provider.sendTransaction({
-            data,
-            from: sender,
-            to: moduleAddress,
-            chainId: TARGET_CHAIN_ID,
-            value: '',
-          });
-
-          addTransactions(txHash || 'failed');
-          return txHash;
-        }
-        case 'ribbit': {
-          if (!walletCapabilities.rawTransactions) {
-            throw new Error('Raw transactions not supported by current wallet');
-          }
-
-          let chainId = SupraChainId.TESTNET;
-
-          if (process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID == "6") {
-            chainId = SupraChainId.TESTNET;
-          } else if (process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID == "8") {
-            chainId = SupraChainId.MAINNET;
-          }
-          
-          const rawTxnRequest: RawTxnRequest = {
-            sender: accounts[0], // Use actual sender address
-            moduleAddress: moduleAddress!, // Use provided module address
-            moduleName: moduleName!, // Use provided module name
-            functionName: functionName!, // Use provided function name
-            typeArgs: runTimeParams, // Use converted runtime parameters
-            args: params || [], // Use provided parameters
-            chainId,
-          };
-
-          const rawTxnBase64: string =
-            await provider.createRawTransactionBuffer(rawTxnRequest);
-
-          // Send to wallet
-          const response: RawTransactionResponse =
-            await provider.signAndSendRawTransaction({
-              rawTxn: rawTxnBase64,
-              chainId,
-              meta: {
-                description: `Call ${moduleName}::${functionName}`, // Dynamic description
-              },
-            });
-
-          if (response.approved) {
-            addTransactions(response.txHash || response.result || 'success');
-            return response.result || response.txHash;
-          } else {
-            throw new Error(response.error || 'Transaction rejected');
-          }
-        }
-        default: {
-          throw new Error(
-            `Raw transactions not supported for wallet: ${selectedWallet}`
-          );
-        }
+      // Never sign as an account the session did not authenticate.
+      //
+      // `accounts[0]` is the address the JWT was issued for. If the user
+      // switched account in the extension and the re-auth that follows
+      // failed or was rejected, the wallet is on a different key than the
+      // session claims - and signing anyway means the chain sees account B
+      // while every server-side check reasons about account A.
+      const exposed = await readStarkeyAccount(provider, 2);
+      if (exposed && !sameAddress(exposed, accounts[0])) {
+        throw new Error(
+          'Starkey is on a different account than this session - reconnect to continue.'
+        );
       }
+      const sender = accounts[0];
+
+      // Decided by reading the chain back, not by whether changeNetwork
+      // resolved. See lib/starkey-network.ts.
+      const landedOn = await ensureChain(provider, TARGET_CHAIN_ID);
+      setSelectedChainId(landedOn);
+      setNetworkData({ chainId: landedOn });
+
+      const rawTxPayload = [
+        sender,
+        0, // sequence number
+        moduleAddress,
+        moduleName,
+        functionName,
+        runTimeParams,
+        params,
+        {},
+      ];
+
+      const data = await provider.createRawTransactionData(rawTxPayload);
+      const txHash = await provider.sendTransaction({
+        data,
+        from: sender,
+        to: moduleAddress,
+        chainId: TARGET_CHAIN_ID,
+        value: '',
+      });
+
+      addTransactions(txHash || 'failed');
+      return txHash;
     } catch (error) {
       console.error('Send raw transaction error:', error);
       throw error;
@@ -1011,90 +515,35 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     const provider = getCurrentProvider();
     if (!provider) return;
 
-    switch (selectedWallet) {
-      case 'starkey': {
-        if (!walletCapabilities.signMessage) {
-          throw new Error('Message signing not supported by current wallet');
-        }
-
-        if (!accounts.length && !account) return;
-        if (!accounts.length && account) {
-          accounts[0] = account;
-        }
-        if (localStorage.getItem('isSigningWallet') === 'true' && !forceSign) {
-          return;
-        }
-
-        localStorage.setItem('isSigningWallet', 'true');
-
-        const hexMessage = '0x' + Buffer.from(message, 'utf8').toString('hex');
-
-        const response = await provider.signMessage({
-          message: hexMessage,
-          nonce,
-        });
-
-        const { publicKey, signature } = response;
-        const verified = nacl.sign.detached.verify(
-          new TextEncoder().encode(message),
-          Uint8Array.from(Buffer.from(signature.slice(2), 'hex')),
-          Uint8Array.from(Buffer.from(publicKey.slice(2), 'hex'))
-        );
-
-        localStorage.setItem('isSigningWallet', 'false');
-        return { ...response, verified };
-      }
-      case 'ribbit': {
-        if (!walletCapabilities.signMessage) {
-          throw new Error('Message signing not supported by current wallet');
-        }
-
-        if (!accounts.length && !account) return;
-        if (!accounts.length && account) {
-          accounts[0] = account;
-        }
-        if (localStorage.getItem('isSigningWallet') === 'true' && !forceSign) {
-          return;
-        }
-
-        localStorage.setItem('isSigningWallet', 'true');
-
-        const hexMessage = '0x' + Buffer.from(message, 'utf8').toString('hex');
-        const response: SignMessageResponse = await provider.signMessage({
-          message: hexMessage,
-          nonce: parseInt(nonce),
-          chainId: parseInt(process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID || '6'),
-        });
-
-        if (response.approved && response.publicKey && response.signature) {
-          const { publicKey, signature } = response;
-          const verified = nacl.sign.detached.verify(
-            new TextEncoder().encode(message),
-            Uint8Array.from(Buffer.from(signature.slice(2), 'hex')),
-            Uint8Array.from(Buffer.from(publicKey.slice(2), 'hex'))
-          );
-
-          localStorage.setItem('isSigningWallet', 'false');
-          return { ...response, verified }; // Changed: return full response like Starkey
-        } else {
-          localStorage.setItem('isSigningWallet', 'false');
-          throw new Error(response.error || 'Message signing rejected');
-        }
-      }
-      default: {
-        throw new Error(
-          `Message signing not supported for wallet: ${selectedWallet}`
-        );
-      }
+    if (!accounts.length && !account) return;
+    if (!accounts.length && account) {
+      accounts[0] = account;
     }
+    if (localStorage.getItem('isSigningWallet') === 'true' && !forceSign) {
+      return;
+    }
+
+    localStorage.setItem('isSigningWallet', 'true');
+
+    const hexMessage = '0x' + Buffer.from(message, 'utf8').toString('hex');
+
+    const response = await provider.signMessage({
+      message: hexMessage,
+      nonce,
+    });
+
+    const { publicKey, signature } = response;
+    const verified = nacl.sign.detached.verify(
+      new TextEncoder().encode(message),
+      Uint8Array.from(Buffer.from(signature.slice(2), 'hex')),
+      Uint8Array.from(Buffer.from(publicKey.slice(2), 'hex'))
+    );
+
+    localStorage.setItem('isSigningWallet', 'false');
+    return { ...response, verified };
   };
 
   const signIn = async () => {
-    if (!walletCapabilities.signMessage) {
-      // For wallets without signing capability, skip token revalidation
-      return true;
-    }
-
     const provider = getCurrentProvider();
     if (provider && accounts.length) {
       const nonce = await fetch('/api/auth/nonce').then((r) => r.text());
@@ -1140,10 +589,6 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   };
 
   const checkAndRevalidateToken = async () => {
-    if (!walletCapabilities.tokenRevalidation) {
-      return true;
-    }
-
     try {
       const response = await fetch('/api/auth/check', {
         method: 'GET',
@@ -1225,9 +670,6 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   // rendering the previous wallet until the page is reloaded. They stay wired
   // here as a fallback, never as the only listener.
   // ───────────────────────────────────────────────────────────────────────────
-
-  /** The Starkey provider as it exists right now, not as state remembers it. */
-  const getStarkeyProvider = () => WALLET_CONFIGS.starkey.provider() || null;
 
   /**
    * Re-authenticates against whatever account the extension now exposes.
@@ -1345,12 +787,10 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   const disconnectedRef = useRef<() => void>();
 
   accountChangedRef.current = (nextAccounts: string[]) => {
-    if (selectedWalletRef.current !== 'starkey') return;
     void handleStarkeyAccountSwitch(nextAccounts ?? []);
   };
 
   networkChangedRef.current = (data: any) => {
-    if (selectedWalletRef.current !== 'starkey') return;
     const next = typeof data === 'string' ? data : data?.chainId;
     if (next) {
       setSelectedChainId(next);
@@ -1359,7 +799,6 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   };
 
   disconnectedRef.current = () => {
-    if (selectedWalletRef.current !== 'starkey') return;
     void handleStarkeyDisconnected();
   };
 
@@ -1451,29 +890,24 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   };
 
   useEffect(() => {
-    if (selectedWallet !== 'starkey' || !walletCapabilities.eventListeners) {
-      return;
-    }
     const listener = (event: any) => starkeyEventHandlerRef.current?.(event);
     checkIsExtensionInstalled();
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [selectedWallet, walletCapabilities.eventListeners]);
+  }, []);
 
   // Token revalidation effect
   useEffect(() => {
-    if (accounts.length > 0 && walletCapabilities.tokenRevalidation) {
+    if (accounts.length > 0) {
       const checkInterval = setInterval(checkAndRevalidateToken, 86400000); // Check every day
       return () => clearInterval(checkInterval);
     }
-  }, [accounts, walletCapabilities]);
+  }, [accounts]);
 
   const authFetch = async (url: string, options: RequestInit = {}) => {
-    if (walletCapabilities.tokenRevalidation) {
-      const isValid = await checkAndRevalidateToken();
-      if (!isValid) {
-        throw new Error('Authentication failed');
-      }
+    const isValid = await checkAndRevalidateToken();
+    if (!isValid) {
+      throw new Error('Authentication failed');
     }
 
     return fetch(url, {
@@ -1486,86 +920,22 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   };
 
   const switchToChain = async (chainId?: string) => {
-    if (!walletCapabilities.networkSwitching) {
-      throw new Error('Network switching not supported by current wallet');
-    }
+    if (!supraProvider) return;
 
-    switch (selectedWallet) {
-      case 'starkey': {
-        if (!supraProvider) break;
-
-        // No `selectedChainId &&` guard. Callers set that state in the same tick
-        // and React has not committed it yet, so the old guard made this a no-op
-        // exactly when it was needed - on a first connect. ensureChain also
-        // verifies the result by reading the chain back rather than trusting
-        // changeNetwork's own answer.
-        const landedOn = await ensureChain(
-          supraProvider,
-          chainId || selectedChainId || TARGET_CHAIN_ID
-        );
-        setSelectedChainId(landedOn);
-        setNetworkData({ chainId: landedOn });
-        break;
-      }
-      case 'ribbit': {
-        // Ribbit doesn't support network switching
-        // call provider.onChangeNetwork when its handler is added on the app side.
-        throw new Error('Network switching not available for Ribbit wallet');
-      }
-    }
-  };
-
-  const getAvailableWallets = () => {
-    const availableWallets: Array<{
-      type: WalletType;
-      name: string;
-      isInstalled: boolean;
-      capabilities: WalletCapabilities;
-    }> = [];
-
-    // Check each wallet type
-    Object.entries(WALLET_CONFIGS).forEach(([walletType, config]) => {
-      const provider = config.provider();
-      const isInstalled = !!provider;
-
-      switch (walletType as WalletType) {
-        case 'starkey': {
-          availableWallets.push({
-            type: 'starkey',
-            name: 'Starkey Wallet',
-            isInstalled,
-            capabilities: config.capabilities,
-          });
-          break;
-        }
-        case 'ribbit': {
-          availableWallets.push({
-            type: 'ribbit',
-            name: 'Ribbit Wallet',
-            isInstalled,
-            capabilities: config.capabilities,
-          });
-          break;
-        }
-      }
-    });
-
-    return availableWallets;
-  };
-
-  const updateSelectedWallet = (walletType: WalletType) => {
-    setSelectedWallet(walletType);
-    setWalletCapabilities(WALLET_CONFIGS[walletType].capabilities);
-    setStoredWalletType(walletType);
+    // No `selectedChainId &&` guard. Callers set that state in the same tick
+    // and React has not committed it yet, so the old guard made this a no-op
+    // exactly when it was needed - on a first connect. ensureChain also
+    // verifies the result by reading the chain back rather than trusting
+    // changeNetwork's own answer.
+    const landedOn = await ensureChain(
+      supraProvider,
+      chainId || selectedChainId || TARGET_CHAIN_ID
+    );
+    setSelectedChainId(landedOn);
+    setNetworkData({ chainId: landedOn });
   };
 
   return {
-    // New wallet selection functionality
-    selectedWallet,
-    walletCapabilities,
-    getAvailableWallets, // Add this new function
-
-    // Existing interface (unchanged)
     getCurrentProvider,
     isExtensionInstalled,
     accounts,
@@ -1573,7 +943,7 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
     balance,
     transactions,
     selectedChainId,
-    connectWallet, // Now accepts optional walletType parameter
+    connectWallet,
     disconnectWallet,
     sendRawTransaction,
     signMessage,

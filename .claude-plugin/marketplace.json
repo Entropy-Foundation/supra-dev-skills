@@ -8,7 +8,7 @@
     {
       "name": "supra-dev-skills",
       "source": "./",
-      "description": "Supra blockchain development toolkit: Move smart contracts, Starkey/Ribbit multiwallet integration, and the Supra L1 TypeScript SDK.",
+      "description": "Supra blockchain development toolkit: Move smart contracts, Starkey wallet integration, and the Supra L1 TypeScript SDK.",
       "version": "3.1.0"
     }
   ]

@@ -101,10 +101,9 @@ cannot stack intervals, and clear it on unmount.
 ## 6. A phone browser has no extension at all
 
 `window.starkey` cannot exist in mobile Safari or Chrome, so a "Connect Starkey"
-button there is a dead end regardless of what it says. Ribbit covers mobile for
-projects that support it.
+button there is a dead end regardless of what it says.
 
-For a Starkey-only dApp, hand the current URL to Starkey's in-app dApp browser
+Hand the current URL to Starkey's in-app dApp browser
 and it reopens the page somewhere the provider exists — see
 `lib/starkey-link.ts`. Note what the user loses in that hop: the page opens
 fresh in a different browser, so no cookies, no `localStorage`, no session

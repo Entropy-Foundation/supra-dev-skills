@@ -1,6 +1,6 @@
 # Sending Transactions with `sendRawTransaction`
 
-`sendRawTransaction` is the unified API for Move entry function calls across both Starkey and Ribbit. Under the hood the two wallets take very different shapes of input — the hook converts the same user-facing signature into whatever each wallet expects.
+`sendRawTransaction` is the API for Move entry function calls. It converts a plain function-call signature into the payload shape Starkey's `createRawTransactionData` expects.
 
 ## The shape you always write
 
@@ -71,9 +71,7 @@ function TransferButton() {
 }
 ```
 
-## Wallet-specific details (for people extending the hook)
-
-### Starkey path
+## What the hook builds (for people extending it)
 
 ```ts
 const rawTxPayload = [
@@ -92,35 +90,14 @@ const txHash = await provider.sendTransaction({ data, from, to, chainId, value: 
 
 Starkey transparently handles the sequence number even though `0` is passed — it queries the chain itself before signing.
 
-If the user's wallet is on the wrong network, the hook calls `provider.changeNetwork({ chainId })` first. This prompts the user to approve the network switch.
-
-### Ribbit path
-
-```ts
-const rawTxnRequest: RawTxnRequest = {
-  sender,
-  moduleAddress,
-  moduleName,
-  functionName,
-  typeArgs: runTimeParams,
-  args: params,
-  chainId,         // SupraChainId.TESTNET (6) or SupraChainId.MAINNET (8)
-};
-const rawTxnBase64 = await provider.createRawTransactionBuffer(rawTxnRequest);
-const response = await provider.signAndSendRawTransaction({
-  rawTxn: rawTxnBase64,
-  chainId,
-  meta: { description: `Call ${moduleName}::${functionName}` },
-});
-```
-
-The `meta.description` is what Ribbit shows to the user on the confirmation screen — customize it for your app's transactions (e.g. `"Mint NFT"`, `"Swap 100 USDC for SUPRA"`) so users see meaningful context, not just a module/function name.
-
-Ribbit returns `{ approved, txHash, result, error }`. The hook treats `approved: false` as a rejection and throws with the error message.
+Before building the payload the hook re-reads the account the extension exposes
+and refuses to sign as an address the session did not authenticate. It then runs
+`ensureChain`, which switches the network if needed and confirms the result by
+reading the chain back rather than trusting `changeNetwork`'s own answer.
 
 ## Common pitfalls
 
 - **Mixing up `params` and `runTimeParams`.** `params` are the BCS-serialized *value* arguments. `runTimeParams` are *type* arguments (generics). For `transfer_coins<CoinType>(to, amount)`, `runTimeParams = ["0x1::supra_coin::SupraCoin"]` and `params = [addrBytes, amountBytes]`.
 - **Forgetting to scale the amount.** If the user types `1.5` and you pass `serializeUint64(BigInt(1))`, they'll send 0.00000001 SUPRA instead of 1.5. Always multiply by `10^decimals` first.
 - **Passing a JS `number` instead of `bigint` to `serializeUint64`.** Numbers above `2^53` lose precision. The helper accepts either, but bigint is safer.
-- **Expecting Ribbit to auto-switch networks.** It won't. Check `networkData.chainId` first and if it's wrong, show the user a message telling them to switch in the Ribbit app.
+- **Assuming `changeNetwork` resolving means the switch happened.** It doesn't reliably. That is why the hook reads the chain back through `ensureChain` — do the same in any custom path.
