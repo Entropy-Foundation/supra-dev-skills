@@ -11,7 +11,7 @@
  * nacl.sign.detached.verify. Even a single character difference between
  * the message signed on the client and AUTH_MESSAGE on the server causes
  * a silent 401. Previously this string was hardcoded in 6 separate places
- * (5x in useSupraMultiWallet.ts + 1x in create-jwt/route.ts), making drift
+ * (5x in useSupraWallet.ts + 1x in create-jwt/route.ts), making drift
  * near-inevitable. This file is the single source of truth — update it
  * here and both client and server automatically stay in sync.
  *

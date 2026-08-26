@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import useSupraWallet from '@/hooks/useSupraWallet';
 import { isHandheldBrowser, starkeyDappBrowserUrl } from '@/lib/starkey-link';
 import logo from '@/public/main/icon.png';
 import starkeyIcon from '@/public/walletIcons/Starkey.png';
@@ -68,7 +68,7 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
   children,
 }) => {
   // Core wallet hook
-  const starKeyWalletHook = useSupraMultiWallet();
+  const starKeyWalletHook = useSupraWallet();
 
   // State
   const [loading, setLoading] = useState<boolean>(false);

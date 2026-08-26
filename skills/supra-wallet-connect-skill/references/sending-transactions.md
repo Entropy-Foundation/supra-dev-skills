@@ -47,11 +47,11 @@ serializeUint64(BigInt(Number(amountStr) * 100_000_000))
 ## Complete example: transfer SUPRA
 
 ```tsx
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import useSupraWallet from '@/hooks/useSupraWallet';
 import useConversionUtils from '@/hooks/useConversionUtils';
 
 function TransferButton() {
-  const { sendRawTransaction, accounts } = useSupraMultiWallet();
+  const { sendRawTransaction, accounts } = useSupraWallet();
   const { addressToUint8Array, serializeUint64 } = useConversionUtils();
 
   const send = async (to: string, amount: string) => {

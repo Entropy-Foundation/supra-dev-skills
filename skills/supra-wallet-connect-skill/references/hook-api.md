@@ -1,11 +1,11 @@
-# `useSupraMultiWallet` Hook API Reference
+# `useSupraWallet` Hook API Reference
 
 Every method and state value returned by the hook, with exact types and behavior notes.
 
 ## Options
 
 ```ts
-const wallet = useSupraMultiWallet({ onDisconnect: () => router.push('/') });
+const wallet = useSupraWallet({ onDisconnect: () => router.push('/') });
 ```
 
 | Option | Type | Notes |

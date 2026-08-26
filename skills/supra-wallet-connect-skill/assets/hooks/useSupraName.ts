@@ -9,7 +9,7 @@
  * lookup fails. Every caller must keep the address as the fallback — see
  * `references/suprans-resolution.md` for the two-line call site.
  *
- * This is a separate hook rather than new state inside `useSupraMultiWallet`
+ * This is a separate hook rather than new state inside `useSupraWallet`
  * on purpose: that file is ~1,600 lines of worked-out wallet edge cases, and a
  * cosmetic label has no business being added to it. Projects that don't want
  * SupraNS just skip this file.
