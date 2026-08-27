@@ -1,26 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from '@/components/ui/button';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Loader2, 
-  X, 
-  ExternalLink, 
-  AlertCircle 
-} from 'lucide-react';
-import { WalletType } from '@/hooks/useSupraMultiWallet';
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import useSupraWallet from '@/hooks/useSupraWallet';
 import { isHandheldBrowser, starkeyDappBrowserUrl } from '@/lib/starkey-link';
-import starkeyIcon from '@/public/walletIcons/Starkey.png';
-import ribbitIcon from '@/public/walletIcons/Ribbit.jpg';
 import logo from '@/public/main/icon.png';
+import starkeyIcon from '@/public/walletIcons/Starkey.png';
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { motion } from 'framer-motion';
+import {
+  ExternalLink,
+  Loader2,
+  X
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 
 // Constants
-const RECENT_WALLET_KEY = 'recent_wallet_type';
 export const PROFILE_CACHE_KEY = 'user_profile_cache';
 export const PROFILE_CACHE_TIMESTAMP_KEY = 'user_profile_cache_timestamp';
 const CACHE_TTL = 600 * 1000; // 10 minutes
@@ -53,30 +49,17 @@ export interface ConnectWalletHandlerProps {
 }
 
 // Wallet configuration
-const WALLET_INFO = {
-  starkey: {
-    name: 'Starkey Wallet',
-    icon: (
-      <img
-        src={starkeyIcon.src}
-        alt="Starkey Wallet"
-        className="w-10 h-10 rounded-full"
-      />
-    ),
-    downloadUrl:
-      'https://chromewebstore.google.com/detail/starkey-wallet-the-offici/hcjhpkgbmechpabifbggldplacolbkoh',
-  },
-  ribbit: {
-    name: 'Ribbit Wallet',
-    icon: (
-      <img
-        src={ribbitIcon.src}
-        alt="Ribbit Wallet"
-        className="w-10 h-10 rounded-full"
-      />
-    ),
-    downloadUrl: 'https://ribbitwallet.com',
-  },
+const STARKEY_WALLET = {
+  name: 'Starkey Wallet',
+  icon: (
+    <img
+      src={starkeyIcon.src}
+      alt="Starkey Wallet"
+      className="w-10 h-10 rounded-full"
+    />
+  ),
+  downloadUrl:
+    'https://chromewebstore.google.com/detail/starkey-wallet-the-offici/hcjhpkgbmechpabifbggldplacolbkoh',
 } as const;
 
 export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
@@ -85,24 +68,14 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
   children,
 }) => {
   // Core wallet hook
-  const starKeyWalletHook = useSupraMultiWallet();
+  const starKeyWalletHook = useSupraWallet();
 
   // State
   const [loading, setLoading] = useState<boolean>(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [walletBalance, setWalletBalance] = useState<string>('0.00');
-  const [availableWallets, setAvailableWallets] = useState<
-    Array<{
-      type: WalletType;
-      name: string;
-      isInstalled: boolean;
-      capabilities: any;
-    }>
-  >([]);
-  const [recentWallet, setRecentWallet] = useState<WalletType | null>(null);
-  const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
-  const [hoveredWallet, setHoveredWallet] = useState<WalletType | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
   const [connectionStage, setConnectionStage] = useState<
     'idle' | 'connecting' | 'signing' | 'success' | 'error' | 'connected-not-signed'
   >('idle');
@@ -121,9 +94,7 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
     setIsHandheld(isHandheldBrowser());
   }, []);
 
-  const starkeyInstalled = availableWallets.some(
-    (w) => w.type === 'starkey' && w.isInstalled
-  );
+  const starkeyInstalled = starKeyWalletHook.isExtensionInstalled;
 
   /**
    * Hands the current URL to Starkey's in-app dApp browser, which reopens this
@@ -169,29 +140,9 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
     try {
       await new Promise((resolve) => setTimeout(resolve, 1));
 
-      switch (starKeyWalletHook.selectedWallet) {
-        case 'starkey': {
-          const balance = await provider.balance();
-          if (balance && balance.formattedBalance) {
-            setWalletBalance(balance.formattedBalance);
-          }
-          break;
-        }
-        case 'ribbit': {
-          const walletBalanceRequest = {
-            chainId: parseInt(process.env.NEXT_PUBLIC_SUPRA_CHAIN_ID || '6'),
-            resourceType: '0x1::supra_coin::SupraCoin',
-            decimals: 8,
-          };
-          const balance = await provider.getWalletBalance(walletBalanceRequest);
-          const balanceStr = balance.balance;
-          console.log("balance.balance", balanceStr, "balance", balance);
-          const numericBalance = balanceStr;
-          if (numericBalance) {
-            setWalletBalance(numericBalance);
-          }
-          break;
-        }
+      const balance = await provider.balance();
+      if (balance && balance.formattedBalance) {
+        setWalletBalance(balance.formattedBalance);
       }
     } catch (error) {
       console.error('Error updating balance:', error);
@@ -199,43 +150,25 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
   };
 
   // Connect wallet function
-  const connectWallet = async (walletType?: WalletType) => {
-    if (walletType) {
-      setLoading(true);
-      setSelectedWallet(walletType);
-      setConnectionStage('connecting');
-      try {
-        const success = await starKeyWalletHook.connectWallet(walletType);
-        if (success) {
-          localStorage.setItem(RECENT_WALLET_KEY, walletType);
-          setRecentWallet(walletType);
-          if (starKeyWalletHook.accounts.length > 0) {
-            onConnect?.(starKeyWalletHook.accounts[0]);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to connect wallet:', error);
-        setConnectionStage('idle');
-      } finally {
-        setLoading(false);
+  const connectWallet = async () => {
+    setLoading(true);
+    setConnectionStage('connecting');
+    try {
+      const success = await starKeyWalletHook.connectWallet();
+      if (success && starKeyWalletHook.accounts.length > 0) {
+        onConnect?.(starKeyWalletHook.accounts[0]);
       }
-    } else {
-      handleConnectClick();
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+      setConnectionStage('idle');
+    } finally {
+      setLoading(false);
     }
   };
 
   // Handle connect click
   const handleConnectClick = () => {
-    const installedWallets = availableWallets.filter((w) => w.isInstalled);
-
-    if (installedWallets.length === 0) {
-      setShowWalletModal(true);
-    } else if (installedWallets.length === 1) {
-      setShowWalletModal(true);
-        //connectWallet(installedWallets[0].type);
-    } else {
-      setShowWalletModal(true);
-    }
+    setShowWalletModal(true);
   };
 
   // Disconnect wallet function
@@ -255,12 +188,10 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
 
   // Get connection stage info
   const getConnectionStageInfo = () => {
-    const wallet = selectedWallet ? WALLET_INFO[selectedWallet] : null;
-
     switch (connectionStage) {
       case 'connecting':
         return {
-          title: `Waiting for ${wallet?.name || 'Wallet'}`,
+          title: `Waiting for ${STARKEY_WALLET.name}`,
           subtitle: 'For a better experience, connect only one wallet at a time',
           buttonText: 'Connecting',
         };
@@ -272,7 +203,7 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
         };
       case 'success':
         return {
-          title: `Connected to ${wallet?.name.replace(' Wallet', '') || 'Wallet'}`,
+          title: `Connected to ${STARKEY_WALLET.name.replace(' Wallet', '')}`,
           subtitle: 'Welcome back to MyDApp',
           buttonText: 'Connected',
         };
@@ -285,7 +216,7 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
 
      case 'connected-not-signed':
         return {
-            title: `Connected to ${wallet?.name.replace(' Wallet', '') || 'Wallet'}`,
+            title: `Connected to ${STARKEY_WALLET.name.replace(' Wallet', '')}`,
             subtitle: 'Sign-in request rejected. General access allowed, but some features may be limited.',
             buttonText: 'Connected',
           };
@@ -294,37 +225,12 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
     }
   };
 
-  // Load recent wallet on mount
-  useEffect(() => {
-    const recent = localStorage.getItem(RECENT_WALLET_KEY) as WalletType;
-    if (recent && ['starkey', 'ribbit'].includes(recent)) {
-      setRecentWallet(recent);
-    }
-  }, []);
-
-  // Check available wallets
-  useEffect(() => {
-    const checkWallets = () => {
-      const wallets = starKeyWalletHook.getAvailableWallets();
-      setAvailableWallets(wallets);
-    };
-
-    checkWallets();
-    const interval = setInterval(checkWallets, 2000);
-    const timeout = setTimeout(() => clearInterval(interval), 30000);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-  }, []);
-
   // Update balance when wallet connects
   useEffect(() => {
     if (starKeyWalletHook.accounts.length > 0) {
       updateWalletBalance();
     }
-  }, [starKeyWalletHook.accounts, starKeyWalletHook.selectedWallet]);
+  }, [starKeyWalletHook.accounts]);
 
   // Listen for wallet events
   useEffect(() => {
@@ -346,7 +252,6 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
     
         setTimeout(() => {
           setShowWalletModal(false);
-          setSelectedWallet(null);
           setConnectionStage('idle');
           setLoading(false);
         }, 2500);
@@ -433,7 +338,6 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
         (canClickOutside && (connectionStage === 'connecting' || connectionStage === 'signing'))
       ) {
         setShowWalletModal(false);
-        setSelectedWallet(null);
         setLoading(false);
         setCanClickOutside(false);
         setConnectionStageStartTime(null);
@@ -456,13 +360,13 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
         handleDisconnect: handleDisconnectWallet,
       })}
 
-      {/* Wallet Selection Modal */}
+      {/* Connect Wallet Modal */}
       <Dialog
         open={showWalletModal}
         onOpenChange={handleModalClose}
       >
-        <VisuallyHidden asChild><DialogTitle>Select a wallet</DialogTitle></VisuallyHidden>
-        <VisuallyHidden asChild><DialogDescription>Select a wallet to connect to MyDApp</DialogDescription></VisuallyHidden>
+        <VisuallyHidden asChild><DialogTitle>Connect your wallet</DialogTitle></VisuallyHidden>
+        <VisuallyHidden asChild><DialogDescription>Connect the Starkey wallet to MyDApp</DialogDescription></VisuallyHidden>
         <DialogContent className="px-4 py-6 w-[90%] mx-auto max-w-sm bg-gradient-to-br from-brand-dark via-gray-900 to-brand-dark border border-brand-dark sm:rounded-3xl rounded-3xl">
 
 
@@ -485,63 +389,55 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {availableWallets.map((wallet) => {
-                    if (wallet.isInstalled) {
-                      return (
-                        <div key={wallet.type} className="w-full relative">
-                          <motion.button
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.05, ease: 'easeInOut' }}
-                            onClick={() =>
-                              wallet.isInstalled
-                                ? connectWallet(wallet.type)
-                                : window.open(WALLET_INFO[wallet.type].downloadUrl, '_blank')
-                            }
-                            disabled={loading && wallet.isInstalled}
-                            onMouseEnter={() => setHoveredWallet(wallet.type)}
-                            onMouseLeave={() => setHoveredWallet(null)}
-                            className="w-full px-4 py-2 rounded-2xl border border-gray-950/60 hover:border-gray-800/80 bg-gray-950/20 hover:bg-gray-900/40 transition-all duration-300 flex items-center gap-4 group"
-                          >
-                            <div className="flex-shrink-0">
-                              {WALLET_INFO[wallet.type].icon}
-                            </div>
-
-                            <div className="flex-1 text-left">
-                              <h3 className="font-medium text-white">
-                                {WALLET_INFO[wallet.type].name}
-                              </h3>
-                              {!wallet.isInstalled && (
-                                <p className="text-sm text-gray-400">
-                                  Not installed - Click to download
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="flex-shrink-0">
-                              {recentWallet === wallet.type && wallet.isInstalled ? (
-                                <span className="bg-gray-800/60 text-gray-300 text-xs px-3 py-1 rounded-full border border-gray-700/40">
-                                  Recent
-                                </span>
-                              ) : wallet.isInstalled ? (
-                                loading && wallet.type === selectedWallet ? (
-                                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                                ) : (
-                                  hoveredWallet === wallet.type && (
-                                    <span className="text-gray-400 text-sm font-medium">
-                                      Connect
-                                    </span>
-                                  )
-                                )
-                              ) : (
-                                <ExternalLink className="h-4 w-4 text-gray-500" />
-                              )}
-                            </div>
-                          </motion.button>
+                  {/* On a phone the extension cannot exist, so the download link
+                      is a dead end - the dApp-browser button below replaces it. */}
+                  {(starkeyInstalled || !isHandheld) && (
+                    <div className="w-full relative">
+                      <motion.button
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.05, ease: 'easeInOut' }}
+                        onClick={() =>
+                          starkeyInstalled
+                            ? connectWallet()
+                            : window.open(STARKEY_WALLET.downloadUrl, '_blank')
+                        }
+                        disabled={loading && starkeyInstalled}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                        className="w-full px-4 py-2 rounded-2xl border border-gray-950/60 hover:border-gray-800/80 bg-gray-950/20 hover:bg-gray-900/40 transition-all duration-300 flex items-center gap-4 group"
+                      >
+                        <div className="flex-shrink-0">
+                          {STARKEY_WALLET.icon}
                         </div>
-                      );
-                    }
-                  })}
+
+                        <div className="flex-1 text-left">
+                          <h3 className="font-medium text-white">
+                            {STARKEY_WALLET.name}
+                          </h3>
+                          {!starkeyInstalled && (
+                            <p className="text-sm text-gray-400">
+                              Not installed - Click to download
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex-shrink-0">
+                          {!starkeyInstalled ? (
+                            <ExternalLink className="h-4 w-4 text-gray-500" />
+                          ) : loading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                          ) : (
+                            isHovered && (
+                              <span className="text-gray-400 text-sm font-medium">
+                                Connect
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </motion.button>
+                    </div>
+                  )}
 
                   {/* A phone browser has no extension to inject window.starkey, so
                       "install Starkey" is not an instruction anyone can follow
@@ -554,7 +450,7 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
                       onClick={openInStarkey}
                       className="w-full px-4 py-2 rounded-2xl border border-gray-950/60 hover:border-gray-800/80 bg-gray-950/20 hover:bg-gray-900/40 transition-all duration-300 flex items-center gap-4 group"
                     >
-                      <div className="flex-shrink-0">{WALLET_INFO.starkey.icon}</div>
+                      <div className="flex-shrink-0">{STARKEY_WALLET.icon}</div>
 
                       <div className="flex-1 text-left">
                         <h3 className="font-medium text-white">Open in Starkey</h3>
@@ -568,19 +464,6 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
                       </div>
                     </motion.button>
                   )}
-
-                  {availableWallets.filter((w) => w.isInstalled).length === 0 &&
-                    !isHandheld && (
-                    <div className="text-center py-8">
-                      <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
-                      <h3 className="text-lg font-semibold text-white mb-2">
-                        No Wallets Detected
-                      </h3>
-                      <p className="text-gray-400 text-sm">
-                        Please install a wallet extension to connect to MyDApp
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="mt-8 pt-4">
@@ -593,36 +476,29 @@ export const ConnectWalletHandler: React.FC<ConnectWalletHandlerProps> = ({
               <div className="w-full text-center py-8">
                 {(() => {
                   const stageInfo = getConnectionStageInfo();
-                  const wallet = selectedWallet ? WALLET_INFO[selectedWallet] : null;
 
                   return (
                     <>
                       <div className="relative flex justify-center mb-6">
                         {connectionStage === 'success' || connectionStage === 'connected-not-signed' ? (
                           <div className="w-20 h-20 rounded-full border-4 border-green-500 flex items-center justify-center">
-                            {wallet && (
-                              <div className="w-12 h-12 flex items-center justify-center">
-                                {wallet.icon}
-                              </div>
-                            )}
+                            <div className="w-12 h-12 flex items-center justify-center">
+                              {STARKEY_WALLET.icon}
+                            </div>
                           </div>
                         ) : connectionStage === 'error' ? (
                           <div className="w-20 h-20 rounded-full border-4 border-red-500 flex items-center justify-center">
-                            {wallet && (
-                                <div className="w-12 h-12 flex items-center justify-center">
-                                    {wallet.icon}
-                                </div>
-                            )}
+                            <div className="w-12 h-12 flex items-center justify-center">
+                              {STARKEY_WALLET.icon}
+                            </div>
                           </div>
                         ) : (
                           <div className="relative">
                             <div className="w-20 h-20 rounded-full border-4 border-gray-600 border-t-gray-400 animate-spin"></div>
                             <div className="absolute inset-0 flex items-center justify-center">
-                              {wallet && (
-                                <div className="w-12 h-12 flex items-center justify-center">
-                                  {wallet.icon}
-                                </div>
-                              )}
+                              <div className="w-12 h-12 flex items-center justify-center">
+                                {STARKEY_WALLET.icon}
+                              </div>
                             </div>
                           </div>
                         )}

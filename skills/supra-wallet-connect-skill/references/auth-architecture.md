@@ -7,7 +7,7 @@ The sign-in-with-wallet flow in this skill is a challenge/response pattern. Noth
 ```
 Client                                   Server (edge runtime)
 ------                                   ----------------------
-connect wallet (Starkey/Ribbit)
+connect wallet (Starkey)
        |
        |--- GET /api/auth/nonce ------->  createNonce() returns:
        |                                   timestamp|random|HMAC

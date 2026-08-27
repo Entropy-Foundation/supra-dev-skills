@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
-import { WALLET_EVENTS } from '@/hooks/useSupraMultiWallet';
+import useSupraWallet from '@/hooks/useSupraWallet';
+import { WALLET_EVENTS } from '@/hooks/useSupraWallet';
 import { WalletSessionSync } from '@/components/WalletSessionSync';
 
 // Create a context to hold the wallet state and a force update function
@@ -28,7 +28,7 @@ export interface WalletProviderProps {
 
 export function WalletProvider({ children, serverAddress }: WalletProviderProps) {
   const [forceUpdateKey, setForceUpdateKey] = useState(0);
-  const starkey = useSupraMultiWallet();
+  const starkey = useSupraWallet();
   // Listen for wallet connection events
   useEffect(() => {
     const handleWalletConnected = () => {
@@ -57,7 +57,7 @@ export function WalletProvider({ children, serverAddress }: WalletProviderProps)
 }
 
 // Custom hook that combines the StarkeyProvider with useStarkeyWallet
-export function useSupraMultiWalletWithRefresh() {
-  const starkey = useSupraMultiWallet();
+export function useSupraWalletWithRefresh() {
+  const starkey = useSupraWallet();
   return starkey;
 }

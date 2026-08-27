@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import useSupraWallet from '@/hooks/useSupraWallet';
 import { sameAddress } from '@/lib/address';
 
 /**
@@ -32,7 +32,7 @@ import { sameAddress } from '@/lib/address';
  * Copy this file to: components/WalletSessionSync.tsx in your Next.js project.
  */
 export function WalletSessionSync({ serverAddress }: { serverAddress: string | null }) {
-  const { accounts, isExtensionInstalled } = useSupraMultiWallet();
+  const { accounts, isExtensionInstalled } = useSupraWallet();
   const router = useRouter();
 
   const clientAddress = accounts[0] ?? null;

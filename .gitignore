@@ -12,3 +12,6 @@
 
 # Node (if anyone runs tooling locally)
 node_modules/
+
+.claude/
+.playwright-mcp/

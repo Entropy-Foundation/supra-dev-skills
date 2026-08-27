@@ -115,9 +115,8 @@ authentication key lookup instead.
 
 **By far the most common issue.** The signed message on the client doesn't exactly match `AUTH_MESSAGE` on the server. Even a single trailing space, a `\n`, or a different TOS URL will cause `nacl.sign.detached.verify` to return `false`.
 
-Fix: search the codebase for the auth message string and confirm **all four** places are identical:
-- Starkey case in `connectWallet()` in the hook
-- Ribbit case in `connectWallet()` in the hook  
+Fix: search the codebase for the auth message string and confirm **all three** places are identical:
+- `connectWallet()` in the hook
 - `signIn()` method in the hook
 - `AUTH_MESSAGE` in `app/api/auth/create-jwt/route.ts`
 
@@ -149,15 +148,6 @@ If the nonce parses wrong ("Invalid nonce format"), check whether something upst
 
 If you genuinely don't need auth, either don't import `lib/auth.ts`, or set any placeholder value.
 
-## Ribbit wallet doesn't connect / `initSdk()` returns null
-
-The Ribbit SDK sometimes isn't ready immediately after the page loads. The hook polls for up to 5 seconds via `setInterval`, which is usually enough. If it's still failing:
-
-- Verify `ribbit-wallet-connect` is installed and its version is current (`^1.2.6`)
-- Check the browser console for errors from the Ribbit SDK specifically
-- Try calling `initSdk()` manually in the console after page load — if that works, the polling window might be too short
-- Confirm the app is running on an origin Ribbit trusts (some Ribbit versions have an origin allowlist during development)
-
 ## "Window Starkey not defined" / extension not detected
 
 - Verify the Starkey extension is actually installed and enabled in the browser
@@ -171,21 +161,6 @@ The user closed the wallet popup without approving or rejecting, so neither the 
 - Confirm `connectionStageStartTime` is being set when the stage transitions to `connecting`
 - Check that the Radix Dialog `onOpenChange` is wired to `handleModalClose`
 - As a last resort, users can refresh the page — no state is corrupted, just stuck
-
-## "Network switching not supported by current wallet" error
-
-Ribbit doesn't support programmatic network switching. If your app requires users to be on a specific network and they connected Ribbit on the wrong one, you need to:
-
-1. Check `networkData.chainId` after connect
-2. If wrong, show a UI message asking the user to change the network inside the Ribbit app
-3. Don't call `switchToChain()` for Ribbit — gate it with `walletCapabilities.networkSwitching`
-
-## `sendRawTransaction` succeeds on Starkey, fails on Ribbit
-
-Common causes:
-- **Ribbit network is wrong.** Ribbit doesn't auto-switch. Check `networkData.chainId` and abort with a useful error if it doesn't match `NEXT_PUBLIC_SUPRA_CHAIN_ID`.
-- **BCS serialization mismatch.** Some Move functions that work on Starkey fail on Ribbit if argument types differ. Both wallets ultimately submit the same bytes to the chain, so if it works on one and not the other, the difference is usually in how the wallet encodes the wrapper, not the BCS args themselves. Log the `RawTxnRequest` object and compare to what you'd pass Starkey.
-- **Decimals mismatch.** The Ribbit balance fetch uses `decimals: 7` in the reference hook (but `decimals: 8` in `ConnectWalletHandler`). If you're integrating a non-SUPRA coin, ensure the decimals match the coin's actual precision.
 
 ## Cookie not being set after login
 
@@ -231,15 +206,15 @@ Or do a find/replace across `ConnectWalletHandler.tsx` to use standard Tailwind 
 
 ## Connection works but balance always shows `0.00`
 
-- For Starkey, check that `provider.balance()` returns something in DevTools
-- For Ribbit, check `NEXT_PUBLIC_SUPRA_CHAIN_ID` matches the network the user is on in Ribbit — if they're on mainnet but chain ID says 6, the balance fetch returns 0
+- Check that `provider.balance()` returns something in DevTools
+- Check `NEXT_PUBLIC_SUPRA_CHAIN_ID` matches the network the extension is actually on — if it says 6 while the wallet is on mainnet, the balance fetch returns 0
 - Balance polling is on a 30-second interval in `ConnectWalletHandler`; if using the hook directly, call `updateBalance()` or rely on the effects inside the hook
 
 ## After wallet account switch in Starkey, app still shows old address
 
 The hook listens for `starkey-wallet-updated` messages and triggers re-authentication. If this isn't working:
 - Confirm the browser is actually posting the message — listen for `message` events in DevTools
-- Check that `walletCapabilities.eventListeners` is true for the current wallet (it should be for Starkey)
+- The `starkey-*` window messages are only a fallback; the primary signal is `provider.on('accountChanged')`. Confirm the provider subscription actually registered — the extension injects late, so the hook retries until it can subscribe
 - If the re-auth is succeeding but the UI isn't refreshing, the `WalletProvider` context key-increment trick should force a re-mount — make sure the provider is actually wrapping the affected components
 
 ## Everything builds but auth routes return 500 on Vercel

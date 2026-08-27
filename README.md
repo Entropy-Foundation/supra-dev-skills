@@ -11,7 +11,7 @@ This repo is a [Claude Code plugin](https://docs.claude.com/en/docs/claude-code/
 | Skill | When it activates |
 |---|---|
 | **supra-move-development** | Writing / reviewing Move contracts, Supra framework, dVRF 3.0, Oracles, Automation, Digital Asset NFTs, CLI workflows |
-| **supra-multiwallet-skill** | Integrating Starkey + Ribbit wallets into a Next.js / React app, connect-wallet UI, sign-in-with-wallet JWT auth |
+| **supra-wallet-connect-skill** | Integrating the Starkey wallet into a Next.js / React app, connect-wallet UI, sign-in-with-wallet JWT auth |
 | **supra-ts-sdk-skill** | Using `supra-ts-sdk` from a frontend / Node app — queries, balances, view functions, transaction build/simulate/submit |
 
 **No more hallucinated APIs. No more wrong module names. No more debugging code Claude made up.**
@@ -27,7 +27,7 @@ Claude's training data for Supra is incomplete and sometimes wrong:
 - Gets the `aptos_std::` → `supra_std::` rename wrong (it should stay as-is)
 - Generates VRF 2.x code (VRF 3.0 uses a different `permit_cap` pattern)
 - Uses `supra move tool run` for automation (correct: `supra move automation register`)
-- Mixes up wallet injection points for Starkey vs Ribbit
+- Misses that Starkey injects `window.starkey` *after* page scripts run, so a single detection read finds nothing
 
 Each skill patches a different slice of this — verified against live docs, SDK source, and on-chain behavior.
 
@@ -76,7 +76,7 @@ supra-dev-skills/
 │   │   ├── SKILL.md
 │   │   ├── references/                   # Move deep-dives, SDK guide, patterns
 │   │   └── scripts/                      # Docker setup, deploy, example contracts
-│   ├── supra-multiwallet-skill/
+│   ├── supra-wallet-connect-skill/
 │   │   ├── SKILL.md
 │   │   ├── assets/                       # Working hook, components, API routes
 │   │   └── references/                   # Auth, hook API, troubleshooting
@@ -109,13 +109,13 @@ Each skill is self-contained — you can open any `skills/*/SKILL.md` to see exa
 | **Patterns** | SmartTable lifecycle, resource accounts, upgrade/migration, timelock, pausable |
 | **Gas** | Fee model, simulation with `simulateTxUsingSerializedRawTransaction` |
 
-### supra-multiwallet-skill
+### supra-wallet-connect-skill
 
-- Production-tested `useSupraMultiWallet` hook (Starkey + Ribbit in one unified API)
+- Production-tested `useSupraWallet` hook for the Starkey extension
 - `connectWallet()`, `disconnectWallet()`, `signMessage()`, `sendRawTransaction()`
 - Optional sign-in-with-wallet → JWT → httpOnly cookie flow (nonce / signature verification, edge-runtime API routes)
 - Drop-in `ConnectWalletHandler` + modal (Tailwind / shadcn / framer-motion / sonner)
-- Migration guidance for single-wallet → multiwallet
+- SupraNS reverse resolution — render `alice.supra` instead of `0x944f...`
 
 ### supra-ts-sdk-skill
 

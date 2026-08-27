@@ -6,8 +6,8 @@
  *
  * WHY THIS FILE EXISTS:
  * A phone browser has no extension to inject `window.starkey`, so a "Connect
- * Starkey" button there is a dead end no matter what it says. Ribbit covers
- * mobile for projects that support it; a Starkey-only dApp needs this instead.
+ * Starkey" button there is a dead end no matter what it says. This file is how
+ * a mobile visitor reaches the wallet at all.
  *
  * Copy this file to: lib/starkey-link.ts in your Next.js project.
  */
