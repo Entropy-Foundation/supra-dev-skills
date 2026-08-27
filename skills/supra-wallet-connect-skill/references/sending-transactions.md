@@ -19,7 +19,7 @@ Returns the tx hash as a string. Throws if the user rejects in the wallet.
 
 ## BCS serialization
 
-Move entry functions take **BCS-serialized bytes**, not JavaScript values. The reference project ships a `useConversionUtils` hook (at `hooks/useConversionUtils.ts` in the source repo) wrapping `supra-l1-sdk-core`'s `BCS` and `TxnBuilderTypes` utilities. Common helpers:
+Move entry functions take **BCS-serialized bytes**, not JavaScript values. The reference project ships a `useConversionUtils` hook (at `hooks/useConversionUtils.ts` in the source repo) wrapping `supra-ts-sdk`'s `BCS` and `TxnBuilderTypes` utilities. Common helpers:
 
 ```ts
 const {

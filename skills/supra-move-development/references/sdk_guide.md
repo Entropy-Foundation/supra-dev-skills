@@ -6,22 +6,34 @@
 
 ### Install
 ```bash
-npm install supra-l1-sdk           # latest (currently 5.0.2)
-npm install supra-l1-sdk@5.0.2    # pin to known-good version for production
+npm install supra-ts-sdk           # latest (currently 1.0.0)
+npm install supra-ts-sdk@1.0.0     # pin to known-good version for production
 ```
 
-> -- Version `2.0.0` does not exist on npm. The published history starts at `3.0.0`. Always check `npm show supra-l1-sdk version` for the current latest.
+> -- `supra-ts-sdk` replaces the older `supra-l1-sdk`. Always check `npm show supra-ts-sdk version` for the current latest.
+>
+> `supra-ts-sdk` depends on `supra-l1-sdk-core` internally, so that package still appears in `npm ls` output. That is expected — never install or import it directly.
 
 ### Import
 ```typescript
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+import { SupraClient, Network, HexString, SupraAccount, BCS, TxnBuilderTypes } from "supra-ts-sdk";
 ```
+
+`HexString`, `SupraAccount`, `BCS`, `TxnBuilderTypes`, and `TypeTagParser` are re-exported from `supra-l1-sdk-core` unchanged. Porting code that imported them directly from `supra-l1-sdk-core` or `supra-l1-sdk` is a one-word change to the import source.
 
 ### Initialize Client
 ```typescript
-const client = await SupraClient.init("https://rpc-testnet.supra.com/");
-const client = await SupraClient.init("https://rpc-mainnet.supra.com/");
+// Construction is synchronous - there is no `await SupraClient.init(...)`
+const supra = new SupraClient({ network: Network.TESTNET });
+const supra = new SupraClient({ network: Network.MAINNET });
+
+// Custom RPC (chainId is required when you supply your own rpcUrl)
+const supra = new SupraClient({ rpcUrl: "https://rpc-testnet.supra.com", chainId: 6 });
 ```
+
+Network defaults: mainnet = chainId 8, testnet = chainId 6.
+
+The client is namespaced. Each area of the API hangs off its own property: `supra.account`, `supra.coin`, `supra.faucet`, `supra.methods`, `supra.contract`, `supra.events`, `supra.block`, `supra.table`, `supra.fungibleAsset`, and `supra.transaction` (which itself carries `.build`, `.simulate`, `.submit`).
 
 ### Create / Load Account
 ```typescript
@@ -33,69 +45,97 @@ const address: HexString = account.address();
 
 ### Fund from Faucet (Testnet Only)
 ```typescript
-await client.fundAccountWithFaucet(account.address());
+await supra.faucet.fundAccountWithFaucet({ accountAddress: account.address() });
+```
+
+### Read Balance
+```typescript
+// Returns bigint - Quants, not SUPRA
+const balance = await supra.account.getAccountSupraCoinBalance({
+  accountAddress: account.address(),
+});
 ```
 
 ### Transfer SupraCoin (convenience method)
 ```typescript
 // transferSupraCoin handles sequence numbers internally
-const response = await client.transferSupraCoin(
-  senderAccount,
-  new HexString("RECEIVER_ADDRESS_HEX"),
-  BigInt(1_000_000),   // Quants (1 SUPRA = 100_000_000 Quants)
-  { maxGas: BigInt(10000), gasUnitPrice: BigInt(100) }
-);
-console.log("TX hash:", response.txHash);
+const response = await supra.coin.transferSupraCoin({
+  senderAccount: account,
+  receiverAccountAddress: "RECEIVER_ADDRESS_HEX",
+  amount: BigInt(1_000_000),   // Quants (1 SUPRA = 100_000_000 Quants)
+  optionalTransactionArgs: {
+    optionalTransactionPayloadArgs: { maxGas: BigInt(10000), gasUnitPrice: BigInt(100) },
+  },
+});
+console.log("TX hash:", response.hash);
 ```
+
+> -- The transaction hash field is `hash`. The old `supra-l1-sdk` called it `txHash`; that property does not exist here.
 
 ---
 
 ## Calling Contract Functions (State-Modifying)
 
-> -- There is **no `invokeContractFunction` method** in the SDK. State-modifying calls use a two-step pattern: `createSerializedRawTxObject` - `sendTxUsingSerializedRawTransaction`.
+Build a raw transaction, then submit it. `supra.transaction.build.rawTxnObject(...)` returns an `ExtendedRawTransaction` that carries its own `.simulate()`, `.submitTransaction()`, and `.toBytes()` — so the whole flow chains off one object.
 
 ```typescript
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+import { SupraClient, Network, SupraAccount, BCS, TxnBuilderTypes } from "supra-ts-sdk";
 
-const client  = await SupraClient.init("https://rpc-testnet.supra.com/");
+const supra   = new SupraClient({ network: Network.TESTNET });
 const account = new SupraAccount(Uint8Array.from(Buffer.from("PRIVATE_KEY_HEX", "hex")));
 
 // Step 1: Get current sequence number (increments with each transaction)
-const accountInfo = await client.getAccountInfo(account.address());
-const seqNum = BigInt(accountInfo.sequence_number);
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
 
-// Step 2: Build and serialize the transaction
+// Step 2: Build the transaction
 // Calling: public entry fun register(admin: &signer, member: address, name: vector<u8>, score: u64)
-const serializedRawTx = await client.createSerializedRawTxObject(
-  account.address(),                   // sender HexString
-  seqNum,                              // sequence number (bigint)
-  "0xYOUR_CONTRACT_ADDRESS",           // module address
-  "registry",                          // module name
-  "register",                          // function name
-  [],                                  // TypeTag[] - empty if no generic type params
-  [
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,   // already a bigint
+  function: "0xYOUR_CONTRACT_ADDRESS::registry::register",
+  functionTypeArgs: [],                                // TypeTag[] - empty if no generic type params
+  functionArgs: [
     // address argument
-    TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(),
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xbeef")),
     // vector<u8> / string argument
     BCS.bcsSerializeStr("Alice"),
     // u64 argument
     BCS.bcsSerializeUint64(BigInt(100)),
-  ]
-);
+  ],
+});
 
-// Step 3: Send
-const response = await client.sendTxUsingSerializedRawTransaction(
-  serializedRawTx,
-  account
-);
-console.log("TX hash:", response.txHash);
+// Step 3: Submit
+const response = await rawTxn.submitTransaction({ senderAccount: account });
+console.log("TX hash:", response.hash);
 ```
+
+> -- `senderSequenceNumber` takes `accountInfo.sequence_number` directly. It is typed `bigint` in `supra-ts-sdk`; the old `BigInt(accountInfo.sequence_number)` wrapper existed because `supra-l1-sdk` returned a string.
+>
+> -- `rawTxnObject` is **synchronous** and takes the target as one `"address::module::function"` string, not three positional arguments.
+
+### Plain values instead of BCS bytes
+
+`supra.transaction.build.simple(...)` accepts ordinary JavaScript values and serializes them for you. It is `async` and takes the same shape otherwise:
+
+```typescript
+const rawTxn = await supra.transaction.build.simple({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0xYOUR_CONTRACT_ADDRESS::registry::register",
+  functionTypeArgs: [],
+  functionArgs: ["0xbeef", "Alice", 100n],   // no manual BCS
+});
+```
+
+Use `rawTxnObject` when you need exact control over the encoding, `simple` otherwise.
 
 ### BCS Encoding Reference
 
+For `rawTxnObject`, whose `functionArgs` is `Uint8Array[]`. `BCS` and `TxnBuilderTypes` import from `supra-ts-sdk`.
+
 | Move type | TypeScript |
 |---|---|
-| `address` | `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` |
+| `address` | `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))` |
 | `u8` | `BCS.bcsSerializeU8(42)` |
 | `u64` | `BCS.bcsSerializeUint64(BigInt(1000))` |
 | `u128` | `BCS.bcsSerializeU128(BigInt("999999"))` |
@@ -110,87 +150,126 @@ console.log("TX hash:", response.txHash);
 
 ```typescript
 // public entry fun transfer<CoinType>(sender, recipient: address, amount: u64)
-import { TypeTagParser } from "supra-l1-sdk";
+import { BCS, TxnBuilderTypes, TypeTagParser } from "supra-ts-sdk";
 
 // 0x1 = supra_framework address; supra_coin is the module; SupraCoin is the type
 const coinTypeTag = new TypeTagParser("0x1::supra_coin::SupraCoin").parseTypeTag();
 
-const serializedRawTx = await client.createSerializedRawTxObject(
-  account.address(),
-  seqNum,
-  "0x1",
-  "coin",
-  "transfer",
-  [coinTypeTag],           // TypeTag[] - the generic coin type
-  [
-    TxnBuilderTypes.AccountAddress.fromHex(recipientAddress).toUint8Array(),
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0x1::coin::transfer",
+  functionTypeArgs: [coinTypeTag],     // TypeTag[] - the generic coin type
+  functionArgs: [
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(recipientAddress)),
     BCS.bcsSerializeUint64(BigInt(1_000_000)),
-  ]
-);
-await client.sendTxUsingSerializedRawTransaction(serializedRawTx, account);
+  ],
+});
+await rawTxn.submitTransaction({ senderAccount: account });
 ```
+
+> -- `rawTxnObject` requires real `TypeTag` objects, hence `TypeTagParser`. `build.simple` and `methods.view` accept the plain string `"0x1::supra_coin::SupraCoin"` instead, because their type argument is `TxnBuilderTypes.TypeTag | string`.
 
 ---
 
 ## Reading View Functions
 
-> Use `invokeViewMethod` (not `invokeContractFunction`) for read-only calls.
-
 ```typescript
 // public fun get_score(registry_addr: address, player: address): u64
-const result = await client.invokeViewMethod(
-  "0xYOUR_CONTRACT_ADDRESS",    // module address
-  "leaderboard",                 // module name
-  "get_score",                   // function name
-  [],                            // TypeTag[]
-  [
-    TxnBuilderTypes.AccountAddress.fromHex("REGISTRY_ADDR").toUint8Array(),
-    TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR").toUint8Array(),
-  ]
-);
-// result is Uint8Array[] - decode as needed
-console.log("Result:", result);
+const result = await supra.methods.view({
+  function: "0xYOUR_CONTRACT_ADDRESS::leaderboard::get_score",
+  typeArguments: [],
+  functionArguments: ["REGISTRY_ADDR", "PLAYER_ADDR"],
+});
+// result is MoveValue[] - one entry per Move return value
+console.log("Score:", result[0]);
 ```
+
+> -- `functionArguments` takes plain JavaScript values (strings, numbers, bigints, booleans, arrays), **not** BCS bytes. Use `supra.methods.viewRaw(...)` if you need the untyped raw response.
 
 ---
 
 ## Simulate Before Sending
 
+Simulate off the built transaction — `ExtendedRawTransaction.simulate()` takes the sender account directly, so there is no authenticator to construct.
+
 ```typescript
-// Use simulateTxUsingSerializedRawTransaction - takes the same serialized bytes
-// as sendTxUsingSerializedRawTransaction, so no extra step is needed.
-const accountInfo  = await client.getAccountInfo(account.address());
-const serializedRawTx = await client.createSerializedRawTxObject(
-  account.address(),
-  BigInt(accountInfo.sequence_number),
-  "0xCONTRACT", "module", "function",
-  [],          // TypeTag[]
-  [/* BCS-encoded args */]
-);
-const simulation = await client.simulateTxUsingSerializedRawTransaction(
-  serializedRawTx,
-  account
-);
-// simulation is Promise<any> - gas_used field contains the estimate
-console.log("Estimated gas:", simulation.gas_used);
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0xCONTRACT::module::function",
+  functionTypeArgs: [],
+  functionArgs: [/* BCS-encoded args */],
+});
+
+const simulation = await rawTxn.simulate(account);
+
+// `output` is a union; narrow to the Move variant to reach gas_used
+if (simulation.output && "Move" in simulation.output) {
+  console.log("Estimated gas:", simulation.output.Move.gas_used);
+  console.log("VM status:",     simulation.output.Move.vm_status);
+}
+
+// Happy with the estimate? Submit the same object.
+const response = await rawTxn.submitTransaction({ senderAccount: account });
+```
+
+You can also let submission simulate first and wait for commitment in one call:
+
+```typescript
+const response = await rawTxn.submitTransaction({
+  senderAccount: account,
+  enableTransactionWaitAndSimulationArgs: {
+    enableTransactionSimulation: true,
+    enableWaitForTransaction: true,
+  },
+});
 ```
 
 ---
 
 ## Multi-Agent (Multi-Signer) Transaction
 
+Multi-agent submission takes **authenticators**, not accounts. Build the raw transaction, wrap it in a `MultiAgentRawTransaction` together with the secondary signer addresses, have every party sign that wrapper, then submit.
+
 ```typescript
-// Both accounts must sign before submission
-const rawTxn = await client.createRawTxObject(
-  seller.address(), seqNum,
-  "0xCONTRACT", "escrow", "settle",
-  [], []
-);
-const response = await client.sendMultiAgentTransaction(
-  seller,       // primary signer (SupraAccount)
-  [buyer],      // secondary signers (SupraAccount[])
-  rawTxn
-);
+import { SupraClient, Network, TxnBuilderTypes, type MoveFunctionId } from "supra-ts-sdk";
+
+const sellerInfo = await supra.account.getAccountInfo({ accountAddress: seller.address() });
+
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: seller.address(),
+  senderSequenceNumber: sellerInfo.sequence_number,
+  function: "0xCONTRACT::escrow::settle" as MoveFunctionId,
+  functionTypeArgs: [],
+  functionArgs: [],    // the signers themselves are not function arguments
+});
+
+// Wrap with the secondary signers - this is what everyone signs
+const multiAgentTxn = new TxnBuilderTypes.MultiAgentRawTransaction(rawTxn, [
+  new TxnBuilderTypes.AccountAddress(buyer.address().toUint8Array()),
+]);
+
+// signTransaction returns HexString for a single-signer txn and an
+// AccountAuthenticatorEd25519 for a multi-agent one - narrow, don't cast
+const sellerAuth = supra.transaction.signTransaction({ senderAccount: seller, rawTxn: multiAgentTxn });
+const buyerAuth  = supra.transaction.signTransaction({ senderAccount: buyer,  rawTxn: multiAgentTxn });
+
+if (
+  !(sellerAuth instanceof TxnBuilderTypes.AccountAuthenticatorEd25519) ||
+  !(buyerAuth  instanceof TxnBuilderTypes.AccountAuthenticatorEd25519)
+) {
+  throw new Error("Expected Ed25519 authenticators for a multi-agent transaction");
+}
+
+const response = await supra.transaction.submit.submitMultiAgentTransaction({
+  secondarySignersAccountAddress: [buyer.address().toString()],
+  rawTxn,
+  senderAuthenticator: sellerAuth,
+  secondarySignersAuthenticator: [buyerAuth],
+});
+console.log("Escrow settled:", response.hash);
 ```
 
 ---
@@ -198,22 +277,24 @@ const response = await client.sendMultiAgentTransaction(
 ## Full Quickstart
 
 ```typescript
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+import { SupraClient, Network, SupraAccount } from "supra-ts-sdk";
 
 (async () => {
-  const client  = await SupraClient.init("https://rpc-testnet.supra.com/");
+  const supra   = new SupraClient({ network: Network.TESTNET });
   const account = new SupraAccount(Uint8Array.from(Buffer.from("PRIVATE_KEY_HEX", "hex")));
 
-  await client.fundAccountWithFaucet(account.address());
-  console.log("Balance:", await client.getAccountSupraCoinBalance(account.address()));
+  await supra.faucet.fundAccountWithFaucet({ accountAddress: account.address() });
+  console.log("Balance:", await supra.account.getAccountSupraCoinBalance({
+    accountAddress: account.address(),
+  }));
 
   // Simple transfer using convenience method
-  const txRes = await client.transferSupraCoin(
-    account,
-    new HexString("RECEIVER_ADDRESS"),
-    BigInt(1000)
-  );
-  console.log("TX:", txRes.txHash);
+  const txRes = await supra.coin.transferSupraCoin({
+    senderAccount: account,
+    receiverAccountAddress: "RECEIVER_ADDRESS",
+    amount: BigInt(1000),
+  });
+  console.log("TX:", txRes.hash);
 })();
 ```
 
@@ -371,6 +452,6 @@ Full REST API docs: https://docs.supra.com/network/move/rest-api
 
 ## SDK Links
 
-- TypeScript SDK: `npm install supra-l1-sdk` | https://github.com/Entropy-Foundation/supra-l1-sdk | https://sdk-docs.supra.com
+- TypeScript SDK: `npm install supra-ts-sdk` | https://github.com/Entropy-Foundation/supra-ts-sdk | https://sdk-docs.supra.com
 - Python SDK: `pip install supra-sdk` | https://github.com/Entropy-Foundation/supra-python-sdk | https://supra-python-sdk.docs.supra.com/
 - REST API: https://docs.supra.com/network/move/rest-api

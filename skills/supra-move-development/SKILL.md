@@ -924,64 +924,58 @@ See `references/sdk_guide.md` for complete SDK reference including multi-agent t
 
 ### TypeScript - Install
 ```bash
-npm install supra-l1-sdk           # latest (currently 5.0.2)
-npm install supra-l1-sdk@5.0.2    # pin for production
+npm install supra-ts-sdk           # latest (currently 1.0.0)
+npm install supra-ts-sdk@1.0.0     # pin for production
 ```
 
-> -- Version `@2.0.0` does not exist on npm - published versions start at `3.0.0`.
+> -- `supra-ts-sdk` replaces the older `supra-l1-sdk`. It depends on `supra-l1-sdk-core` internally, so that package still shows up in `npm ls` — never install or import it directly.
 
 ### TypeScript - State-Modifying Contract Call
 
-> -- There is **no `invokeContractFunction`** method. The real pattern is `createSerializedRawTxObject` - `sendTxUsingSerializedRawTransaction`.
+> -- The client is namespaced: build via `supra.transaction.build`, then submit off the returned object.
 
 ```typescript
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+import { SupraClient, Network, SupraAccount, BCS, TxnBuilderTypes } from "supra-ts-sdk";
 
-const client  = await SupraClient.init("https://rpc-testnet.supra.com/");
+const supra   = new SupraClient({ network: Network.TESTNET });   // synchronous
 const account = new SupraAccount(Uint8Array.from(Buffer.from("PRIVATE_KEY_HEX", "hex")));
 
-// Get sequence number (required for every transaction)
-const accountInfo = await client.getAccountInfo(account.address());
-const seqNum = BigInt(accountInfo.sequence_number);
+// Get sequence number (required for every transaction) - already a bigint
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
 
 // Call: public entry fun register(admin: &signer, member: address, name: vector<u8>, score: u64)
-const rawTx = await client.createSerializedRawTxObject(
-  account.address(),          // sender
-  seqNum,                     // sequence number (bigint)
-  "0xYOUR_CONTRACT_ADDRESS",  // module address
-  "registry",                 // module name
-  "register",                 // function name
-  [],                         // TypeTag[] - empty if no generic params
-  [
-    TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(), // address
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0xYOUR_CONTRACT_ADDRESS::registry::register",
+  functionTypeArgs: [],       // TypeTag[] - empty if no generic params
+  functionArgs: [
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xbeef")), // address
     BCS.bcsSerializeStr("Alice"),                                     // string/vector<u8>
     BCS.bcsSerializeUint64(BigInt(100)),                              // u64
-  ]
-);
-const response = await client.sendTxUsingSerializedRawTransaction(rawTx, account);
-console.log("TX hash:", response.txHash);
+  ],
+});
+const response = await rawTxn.submitTransaction({ senderAccount: account });
+console.log("TX hash:", response.hash);
 ```
+
+> -- `supra.transaction.build.simple({ ... })` takes plain JavaScript values instead of BCS bytes if you don't need control over the encoding.
 
 ### TypeScript - View Function Call
 
-> Use `invokeViewMethod` (not `invokeContractFunction`) for read-only calls.
-
 ```typescript
-const result = await client.invokeViewMethod(
-  "0xYOUR_CONTRACT_ADDRESS", "leaderboard", "get_score",
-  [],
-  [
-    TxnBuilderTypes.AccountAddress.fromHex("REGISTRY_ADDR").toUint8Array(),
-    TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR").toUint8Array(),
-  ]
-);
+const result = await supra.methods.view({
+  function: "0xYOUR_CONTRACT_ADDRESS::leaderboard::get_score",
+  typeArguments: [],
+  functionArguments: ["REGISTRY_ADDR", "PLAYER_ADDR"],   // plain values, not BCS bytes
+});
 ```
 
-**BCS encoding reference:**
+**BCS encoding reference** (for `build.rawTxnObject`, whose `functionArgs` is `Uint8Array[]`):
 
 | Move type | TypeScript |
 |---|---|
-| `address` | `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` |
+| `address` | `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))` |
 | `u8` | `BCS.bcsSerializeU8(42)` |
 | `u64` | `BCS.bcsSerializeUint64(BigInt(1000))` |
 | `u128` | `BCS.bcsSerializeU128(BigInt("999"))` |
@@ -1079,7 +1073,7 @@ See `references/patterns.md` for full upgrade code examples.
 - Wallet: StarKey - https://starkey.app
 - Supra Docs: https://docs.supra.com
 - Framework Source: https://github.com/Entropy-Foundation/aptos-core/tree/dev/aptos-move/framework/supra-framework
-- TypeScript SDK: https://github.com/Entropy-Foundation/supra-l1-sdk
+- TypeScript SDK: https://github.com/Entropy-Foundation/supra-ts-sdk
 - SDK Docs: https://sdk-docs.supra.com
 - Dev Hub: https://github.com/supra-labs/supra-dev-hub
 

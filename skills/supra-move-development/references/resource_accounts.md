@@ -115,17 +115,17 @@ let (resource_signer, resource_cap) = account::create_resource_account(admin, se
 
 The resource account address is derived as `sha3_256(admin_address_bytes || seed_bytes || 0xFF)` where `admin_address` is the 32-byte canonical form (zero-padded).
 
-> -- `TxnBuilderTypes.AccountAddress.fromDerivationPath` does **not** exist in `supra-l1-sdk`. The `AccountAddress` class only exposes `fromHex`, `isValid`, `standardizeAddress`, and `deserialize`.
+> -- `TxnBuilderTypes.AccountAddress.fromDerivationPath` does **not** exist in `supra-ts-sdk`. The `AccountAddress` class only exposes `fromHex`, `isValid`, `standardizeAddress`, and `deserialize`.
 
 To pre-compute the resource account address in TypeScript, implement the derivation manually using the Web Crypto API or a SHA-3 library (e.g. `js-sha3`):
 
 ```typescript
 import { sha3_256 } from "js-sha3";
-import { TxnBuilderTypes, HexString } from "supra-l1-sdk";
+import { BCS, TxnBuilderTypes, HexString } from "supra-ts-sdk";
 
 function deriveResourceAccountAddress(adminHex: string, seed: Uint8Array): string {
   // Canonical 32-byte admin address
-  const adminAddr = TxnBuilderTypes.AccountAddress.fromHex(adminHex).toUint8Array();
+  const adminAddr = BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(adminHex));
   // seed_length prefix (1 byte) + seed bytes
   const seedLen   = new Uint8Array([seed.length]);
   // Domain separator: 0xFF

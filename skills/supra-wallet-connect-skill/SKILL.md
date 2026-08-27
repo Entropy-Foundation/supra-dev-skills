@@ -33,7 +33,7 @@ Before touching files, figure out:
 The runtime dependencies are:
 
 ```bash
-npm install tweetnacl jose js-sha3 supra-l1-sdk-core sonner
+npm install tweetnacl jose js-sha3 supra-ts-sdk sonner
 ```
 
 `js-sha3` is used by `lib/auth.ts` to derive an address from a public key, which

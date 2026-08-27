@@ -123,7 +123,7 @@ Each skill is self-contained — you can open any `skills/*/SKILL.md` to see exa
 - Account queries, balances, resources, events
 - Transaction lifecycle: build, simulate, submit, wait
 - View functions, ABI proxies, Move type mapping
-- BCS encoding with `supra-l1-sdk-core`
+- BCS encoding with `supra-ts-sdk`
 
 ---
 

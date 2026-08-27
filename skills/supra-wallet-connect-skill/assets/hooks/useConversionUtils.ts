@@ -4,7 +4,7 @@
  * BCS serialization helpers for Move entry function arguments.
  *
  * Move entry functions require BCS-serialized bytes (Uint8Array[]), not raw
- * JavaScript values. This hook wraps supra-l1-sdk-core's BCS and
+ * JavaScript values. This hook wraps supra-ts-sdk's BCS and
  * TxnBuilderTypes utilities into easy-to-use named helpers.
  *
  * USAGE:
@@ -17,12 +17,12 @@
  *
  * Copy this file to: hooks/useConversionUtils.ts in your Next.js project.
  *
- * DEPENDENCY: supra-l1-sdk-core  (already installed as part of this skill's deps)
+ * DEPENDENCY: supra-ts-sdk  (already installed as part of this skill's deps)
  */
 
 "use client";
 
-import { BCS, TxnBuilderTypes } from "supra-l1-sdk-core";
+import { BCS, TxnBuilderTypes } from "supra-ts-sdk";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
