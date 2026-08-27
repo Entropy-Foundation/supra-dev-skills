@@ -4,6 +4,51 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [Unreleased]
+
+### Changed — BREAKING
+
+- **TypeScript SDK migrated from `supra-l1-sdk` / `supra-l1-sdk-core` to `supra-ts-sdk`.**
+  Every install command, import, and client example across all three skills now
+  targets `supra-ts-sdk` (currently `1.0.0`). No file in this repo installs or
+  imports the old packages any more.
+- `SupraClient` is now namespaced and its constructor is **synchronous**:
+  `await SupraClient.init(url)` → `new SupraClient({ network: Network.TESTNET })`.
+  Calls move onto `supra.account`, `supra.coin`, `supra.faucet`, `supra.methods`
+  and `supra.transaction.{build,simulate,submit}`.
+- Transaction responses expose `hash`, not `txHash`.
+- `getAccountInfo(...).sequence_number` is typed `bigint` — the old
+  `BigInt(accountInfo.sequence_number)` wrapper is gone.
+- `useConversionUtils` now imports `BCS` / `TxnBuilderTypes` from `supra-ts-sdk`.
+  Its behavior is unchanged: `supra-ts-sdk` re-exports `BCS`, `HexString`,
+  `SupraAccount`, `TxnBuilderTypes`, and `TypeTagParser` from `supra-l1-sdk-core`
+  as the same classes.
+
+> `supra-ts-sdk@1.0.0` depends on `supra-l1-sdk-core@^2.0.1`, so that package
+> still appears in a downstream `npm ls`. That is expected and correct — what
+> this migration removes is the **direct** dependency.
+
+### Fixed
+
+Three SDK snippets were wrong against `supra-l1-sdk` v5 as well, so they were
+rewritten rather than renamed:
+
+- **Multi-agent transaction** (`patterns.md`) passed `SupraAccount`s to
+  `sendMultiAgentTransaction`, whose v5 signature takes secondary signer
+  *addresses* and *authenticators*. Replaced with the real flow — wrap in
+  `TxnBuilderTypes.MultiAgentRawTransaction`, sign per party, then submit.
+- **Simulation** (`patterns.md`, `sdk_guide.md`) called
+  `simulateTxUsingSerializedRawTransaction(serializedRawTx, account)` with the
+  arguments reversed; v5 takes `(txAuthenticator, serializedRawTransaction)`.
+  Replaced with the fluent `rawTxn.simulate(account)`, which does take an account.
+  Gas is read from `simulation.output.Move.gas_used` behind a union narrowing.
+- **View function** (`sdk_guide.md`, `SKILL.md`) passed five positional arguments
+  with BCS-encoded values to `invokeViewMethod`, whose v5 signature takes three
+  and expects plain strings. Replaced with
+  `supra.methods.view({ function, typeArguments, functionArguments })`.
+
+---
+
 ## [4.0.0] — August 2026
 
 Ribbit support was removed in 3.1.x, leaving Starkey as the only wallet, so the
@@ -195,7 +240,7 @@ was reproducible in the shipped template.
 
 ### Significant Fixes
 - **`simulateTx` signature** — `client.simulateTx(account, rawTxn)` does not exist. Replaced with `simulateTxUsingSerializedRawTransaction(serializedRawTx, account)` in both `sdk_guide.md` and `patterns.md`. Added explicit warning that the old signature does not exist.
-- **`AccountAddress.fromDerivationPath`** — Method does not exist in `supra-l1-sdk`. Removed from `resource_accounts.md` and replaced with manual `sha3_256` derivation using `js-sha3`, with the correct domain separator (`0xFF`) and byte layout documented.
+- **`AccountAddress.fromDerivationPath`** — Method does not exist in the `TxnBuilderTypes` re-exported by `supra-ts-sdk`. Removed from `resource_accounts.md` and replaced with manual `sha3_256` derivation using `js-sha3`, with the correct domain separator (`0xFF`) and byte layout documented.
 - **`advanced_examples.move` transfer_nft** — Added prominent `DEMO PATTERN — NOT PRODUCTION SAFE` comment explaining the ownership limitation (only collection admin can hold transferable NFTs in this pattern).
 - **README version** — Updated from 2.0.0 to 2.1.0 to match SKILL.md.
 
@@ -239,7 +284,7 @@ was reproducible in the shipped template.
 - **README.md** — Added "How to Load This Skill into Claude Code" section (three options: CLAUDE.md import, direct read, copy).
 
 ### BCS encoding table
-- Fixed `address` encoding: `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` (not `BCS.bcsToBytes(...)`)
+- Fixed `address` encoding to `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()`. **Superseded — that method does not exist on `AccountAddress`;** the correct form is `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))`; corrected in this migration.
 - Added `BCS.bcsSerializeStr` for string/vector<u8> arguments
 - Added Python `Serializer` encoder reference table
 
@@ -263,7 +308,7 @@ was reproducible in the shipped template.
 - Multi-signer (multi-agent) transaction pattern with TypeScript SDK example
 - Upgrade/migration guidance: compatible publish, new module + migration, resource account proxy
 - `init_module` auto-setup pattern documented
-- Version pinning guidance for TypeScript SDK (`npm install supra-l1-sdk@x.y.z`)
+- Version pinning guidance for TypeScript SDK (`npm install supra-ts-sdk@x.y.z`)
 
 ### Improved
 - SKILL.md fully restructured into named sections (SETUP, MOVE LANGUAGE, DATA STRUCTURES, SUPRA SPECIFICS, COMMON PATTERNS, NATIVE FEATURES, SDK, TESTING, UPGRADE, NETWORK)

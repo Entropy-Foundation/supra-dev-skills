@@ -36,9 +36,18 @@ import {
   type MoveStructId,
   type CoinInfo,
   BCS,
+  SupraAccount,
+  HexString,
+  TxnBuilderTypes,
+  TypeTagParser,
 } from "supra-ts-sdk";
-import { SupraAccount, HexString, TxnBuilderTypes, TypeTagParser } from "supra-l1-sdk-core";
 ```
+
+Everything comes from the single `supra-ts-sdk` entry point. `BCS`, `HexString`,
+`SupraAccount`, `TxnBuilderTypes`, and `TypeTagParser` are re-exported from
+`supra-l1-sdk-core` unchanged — same classes, same methods. If you are porting code
+that imported them from `supra-l1-sdk-core` (or from the older `supra-l1-sdk`),
+only the import source changes.
 
 ## Client Initialization
 
@@ -535,10 +544,10 @@ const result = await supra.faucet.fundAccountWithFaucet({
 
 ## Account Creation
 
-`SupraAccount` comes from `supra-l1-sdk-core`:
+`SupraAccount` is re-exported by `supra-ts-sdk`:
 
 ```typescript
-import { SupraAccount } from "supra-l1-sdk-core";
+import { SupraAccount } from "supra-ts-sdk";
 
 // Generate new account
 const account = new SupraAccount();
