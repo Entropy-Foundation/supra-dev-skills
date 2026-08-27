@@ -1,6 +1,6 @@
 # Using `ConnectWalletHandler`
 
-`ConnectWalletHandler` is a render-prop wrapper that gives you a "Connect Wallet" button with a modal carrying the install / mobile-deep-link states, connection stage indicators ("Waiting for Starkey Wallet", "Sign to verify", etc.), and balance/account management — all pre-wired to `useSupraMultiWallet`.
+`ConnectWalletHandler` is a render-prop wrapper that gives you a "Connect Wallet" button with a modal carrying the install / mobile-deep-link states, connection stage indicators ("Waiting for Starkey Wallet", "Sign to verify", etc.), and balance/account management — all pre-wired to `useSupraWallet`.
 
 Use it when you want the reference project's UX as-is. Skip it and call the hook directly when you want to build your own UI.
 
@@ -59,7 +59,7 @@ The modal displays different content based on an internal `connectionStage` stat
 - `connected-not-signed` — user connected but rejected the signature; app access allowed but limited
 - `error` — generic failure
 
-These stages are driven by the `presigned-state`, `postsigned-state`, and `wallet-error` window events that `useSupraMultiWallet` dispatches — so if you bypass `ConnectWalletHandler` and build your own modal, you can listen for the same events to drive state.
+These stages are driven by the `presigned-state`, `postsigned-state`, and `wallet-error` window events that `useSupraWallet` dispatches — so if you bypass `ConnectWalletHandler` and build your own modal, you can listen for the same events to drive state.
 
 ## Required assets
 
@@ -100,7 +100,7 @@ To remove it entirely: delete the `getProfileFromCache` helper, the `userProfile
 
 ## When to skip it
 
-If any of these apply, building your own modal directly on top of `useSupraMultiWallet` is cleaner than customizing `ConnectWalletHandler`:
+If any of these apply, building your own modal directly on top of `useSupraWallet` is cleaner than customizing `ConnectWalletHandler`:
 
 - Your project doesn't use shadcn/ui, framer-motion, or sonner
 - You have your own design system with established dialog patterns

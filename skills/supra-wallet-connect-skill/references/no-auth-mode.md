@@ -12,7 +12,7 @@ You don't need to install `jose` either (it's only used by the auth library).
 
 ## What to change in the hook
 
-The `useSupraMultiWallet.ts` hook makes several `fetch('/api/auth/...')` calls inside `connectWallet`. Remove them.
+The `useSupraWallet.ts` hook makes several `fetch('/api/auth/...')` calls inside `connectWallet`. Remove them.
 
 ### In the connect path
 

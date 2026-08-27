@@ -31,7 +31,7 @@ changed. Its state stays on the previous wallet until the page is reloaded and
 the mount-time read runs again — which is why the bug always gets reported as
 "it only updates when I refresh".
 
-`useSupraMultiWallet` subscribes to the provider events and keeps the window
+`useSupraWallet` subscribes to the provider events and keeps the window
 messages as a fallback. Both paths call the same handler, so they cannot
 disagree.
 

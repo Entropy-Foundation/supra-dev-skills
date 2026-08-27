@@ -81,7 +81,7 @@ const readStarkeyAccount = async (
  */
 let switchInFlight: string | null = null;
 
-export type UseSupraMultiWalletOptions = {
+export type UseSupraWalletOptions = {
   /**
    * Called after the wallet disconnects, or reports no account at all.
    *
@@ -94,7 +94,7 @@ export type UseSupraMultiWalletOptions = {
   onDisconnect?: () => void;
 };
 
-const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
+const useSupraWallet = (options: UseSupraWalletOptions = {}) => {
   // Read through a ref so the provider event handlers registered below always
   // see the current callback without re-subscribing.
   const onDisconnectRef = useRef(options.onDisconnect);
@@ -956,4 +956,4 @@ const useSupraMultiWallet = (options: UseSupraMultiWalletOptions = {}) => {
   };
 };
 
-export default useSupraMultiWallet;
+export default useSupraWallet;

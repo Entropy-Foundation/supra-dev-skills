@@ -4,6 +4,34 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ---
 
+## [4.0.0] — August 2026
+
+Ribbit support was removed in 3.1.x, leaving Starkey as the only wallet, so the
+"multiwallet" naming is gone.
+
+### Changed — BREAKING
+
+- Skill renamed: `supra-multiwallet-skill` → `supra-wallet-connect-skill`. The
+  directory moved to `skills/supra-wallet-connect-skill/` and the invocation
+  name is now `supra-dev-skills:supra-wallet-connect-skill`. Reinstall the
+  plugin to pick it up.
+- Hook renamed: `useSupraMultiWallet` → `useSupraWallet`, and the file it ships
+  as, `assets/hooks/useSupraMultiWallet.ts` → `assets/hooks/useSupraWallet.ts`.
+- `UseSupraMultiWalletOptions` → `UseSupraWalletOptions`,
+  `useSupraMultiWalletWithRefresh` → `useSupraWalletWithRefresh`.
+
+### Migration
+
+In a project that copied an earlier version, rename the hook file and then:
+
+    sed -i 's/useSupraMultiWalletWithRefresh/useSupraWalletWithRefresh/g;
+            s/UseSupraMultiWalletOptions/UseSupraWalletOptions/g;
+            s/useSupraMultiWallet/useSupraWallet/g' <your files>
+
+No environment variable, API route path, or wallet behavior changed.
+
+---
+
 ## [3.1.0] — August 2026
 
 Starkey runtime correctness pass on `supra-multiwallet-skill`, from defects found

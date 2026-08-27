@@ -1,9 +1,9 @@
 ---
-name: supra-multiwallet-skill
+name: supra-wallet-connect-skill
 description: Integrate Starkey wallet connect authentication for the Supra blockchain into a Next.js app. Use this skill whenever the user wants to add Supra wallet support, connect the Starkey wallet, build a "connect wallet" button/modal for Supra, sign messages or send transactions via a Supra wallet, implement wallet-based JWT auth for a Supra dApp, or set up protected routes gated by Supra wallet sign-in. Use it as well for SupraNS (Supra Name Service) name display -- resolving a connected wallet address to its ".supra" name so the UI shows "alice.supra" instead of "0x944f...", reverse lookup via the SupraNS router contract, or any request to show a username/domain instead of a wallet address on Supra.
 ---
 
-# Supra Multiwallet Integration
+# Supra Wallet Integration
 
 This skill integrates **Starkey** wallet support for the **Supra blockchain** into a Next.js application, with optional JWT-based authentication (sign-in-with-wallet, protected routes).
 
@@ -13,7 +13,7 @@ The canonical implementation lives in `assets/` as working, production-tested co
 
 After running, the target project will have:
 
-- A `useSupraMultiWallet` hook exposing `connectWallet()`, `disconnectWallet()`, `signMessage()`, `sendRawTransaction()`, and wallet state (`accounts`, `balance`, `isExtensionInstalled`, etc.)
+- A `useSupraWallet` hook exposing `connectWallet()`, `disconnectWallet()`, `signMessage()`, `sendRawTransaction()`, and wallet state (`accounts`, `balance`, `isExtensionInstalled`, etc.)
 - **Starkey** support (browser extension, injected into `window.starkey.supra`), including its mobile dApp browser
 - Optionally: a full **sign-in-with-wallet → JWT → httpOnly cookie** auth flow with nonce/signature verification and edge-runtime API routes
 - Optionally: a drop-in `ConnectWalletHandler` + modal for the connect UI
@@ -56,7 +56,7 @@ All files referenced below live in this skill's `assets/` directory. Read them w
 
 | From (this skill) | To (target project) |
 |---|---|
-| `assets/hooks/useSupraMultiWallet.ts` | `hooks/useSupraMultiWallet.ts` |
+| `assets/hooks/useSupraWallet.ts` | `hooks/useSupraWallet.ts` |
 | `assets/hooks/useConversionUtils.ts` | `hooks/useConversionUtils.ts` |
 | `assets/components/WalletProvider.tsx` | `components/WalletProvider.tsx` |
 | `assets/lib/address.ts` | `lib/address.ts` |
@@ -196,7 +196,7 @@ approved the site:
 
 ```tsx
 const router = useRouter();
-const wallet = useSupraMultiWallet({ onDisconnect: () => router.push('/') });
+const wallet = useSupraWallet({ onDisconnect: () => router.push('/') });
 ```
 
 Earlier versions called `router.push('/')` from inside a wallet event handler,
@@ -227,7 +227,7 @@ In any client component:
 
 ```tsx
 'use client';
-import useSupraMultiWallet from '@/hooks/useSupraMultiWallet';
+import useSupraWallet from '@/hooks/useSupraWallet';
 
 export function MyComponent() {
   const {
@@ -240,7 +240,7 @@ export function MyComponent() {
     signMessage,
     sendRawTransaction,
     authFetch,         // fetch wrapper that auto-revalidates the JWT before the call
-  } = useSupraMultiWallet();   // optionally: useSupraMultiWallet({ onDisconnect })
+  } = useSupraWallet();   // optionally: useSupraWallet({ onDisconnect })
 
   if (accounts.length === 0) {
     return <button onClick={() => connectWallet()}>Connect Starkey</button>;
@@ -303,7 +303,7 @@ If something breaks, see `references/troubleshooting.md` and
 Load these on demand (don't read them all upfront):
 
 - **`references/starkey-runtime-quirks.md`** — what the Starkey extension actually does: which events report an account switch, why the first `account()` read comes back empty, why `changeNetwork` lies in the mobile dApp browser, address shapes, and detection that has no natural end. Read **before** debugging any connect, switch, or network problem, and before adapting the event or network code.
-- **`references/hook-api.md`** — full signature and behavior of every method returned by `useSupraMultiWallet`. Read when the user asks about a specific method or wants to build custom UI around the hook.
+- **`references/hook-api.md`** — full signature and behavior of every method returned by `useSupraWallet`. Read when the user asks about a specific method or wants to build custom UI around the hook.
 - **`references/sending-transactions.md`** — how `sendRawTransaction` works, BCS argument serialization, type args, chain selection. Read when implementing token transfers or Move function calls.
 - **`references/auth-architecture.md`** — the nonce/JWT/signature flow in detail, why each piece exists, and how to customize expiration windows, the auth message, or the revalidation cadence. Read when modifying auth behavior.
 - **`references/no-auth-mode.md`** — how to strip the JWT auth out of the hook if the project only needs wallet connection (no sign-in). Read when the user explicitly says they don't want sign-in or when integrating into a read-only dApp.
