@@ -104,9 +104,10 @@ module my_module::lottery {
     use aptos_std::table;
     use supra_addr::supra_vrf;
     use supra_addr::deposit::{Self, SupraVRFPermit};
-    use std::string::{Self, String};
+    use std::string;
     use supra_framework::event;
-    use std::signer;
+
+    const E_UNKNOWN_NONCE: u64 = 1; // callback nonce was never requested by this module
 
     // -- Permit struct --------------------------------------------------
     // Marker struct for this module's VRF permit.
@@ -176,7 +177,7 @@ module my_module::lottery {
     ) acquires State {
         // Guard: nonce must be in the pending table - rejects unexpected callbacks
         let state = borrow_global_mut<State>(@my_module);
-        assert!(table::contains(&state.random_numbers, nonce), E_NOT_INITIALIZED);
+        assert!(table::contains(&state.random_numbers, nonce), E_UNKNOWN_NONCE);
 
         // verify_callback authenticates the VRF response and returns random numbers
         // Interface source: https://github.com/Entropy-Foundation/vrf-interface

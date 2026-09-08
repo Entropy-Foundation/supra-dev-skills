@@ -115,23 +115,24 @@ let (resource_signer, resource_cap) = account::create_resource_account(admin, se
 
 The resource account address is derived as `sha3_256(admin_address_bytes || seed_bytes || 0xFF)` where `admin_address` is the 32-byte canonical form (zero-padded).
 
-> -- `TxnBuilderTypes.AccountAddress.fromDerivationPath` does **not** exist in `supra-l1-sdk`. The `AccountAddress` class only exposes `fromHex`, `isValid`, `standardizeAddress`, and `deserialize`.
+> -- `TxnBuilderTypes.AccountAddress.fromDerivationPath` does **not** exist in `supra-ts-sdk`. The `AccountAddress` class exposes `fromHex`, `isValid`, `toHexString`, `serialize`, and `deserialize` - there is no `toUint8Array()` on it either; use `BCS.bcsToBytes(...)` to get the 32 raw bytes.
 
 To pre-compute the resource account address in TypeScript, implement the derivation manually using the Web Crypto API or a SHA-3 library (e.g. `js-sha3`):
 
 ```typescript
 import { sha3_256 } from "js-sha3";
-import { TxnBuilderTypes, HexString } from "supra-l1-sdk";
+import { BCS, TxnBuilderTypes } from "supra-ts-sdk";
 
 function deriveResourceAccountAddress(adminHex: string, seed: Uint8Array): string {
-  // Canonical 32-byte admin address
-  const adminAddr = TxnBuilderTypes.AccountAddress.fromHex(adminHex).toUint8Array();
-  // seed_length prefix (1 byte) + seed bytes
-  const seedLen   = new Uint8Array([seed.length]);
-  // Domain separator: 0xFF
+  // Canonical 32-byte admin address. BCS of an address is the raw 32 bytes -
+  // no length prefix, because address is a fixed-size type.
+  const adminAddr = BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex(adminHex));
+  // The seed is appended RAW. The framework does vector::append(&mut bytes, seed),
+  // so there is no length byte in front of it either.
+  // Domain separator: 0xFF (DERIVE_RESOURCE_ACCOUNT_SCHEME)
   const separator = new Uint8Array([0xff]);
-  const combined  = new Uint8Array([...adminAddr, ...seedLen, ...seed, ...separator]);
-  return sha3_256(combined);
+  const combined  = new Uint8Array([...adminAddr, ...seed, ...separator]);
+  return "0x" + sha3_256(combined);
 }
 
 const resourceAddress = deriveResourceAccountAddress(
@@ -141,7 +142,7 @@ const resourceAddress = deriveResourceAccountAddress(
 console.log("Resource account address:", resourceAddress);
 ```
 
-> The Move runtime uses `0xFF` as the domain separator byte, distinct from the `0xFE` separator used for regular account address derivation. Verify against the framework source before using in production: https://github.com/Entropy-Foundation/aptos-core
+> This mirrors `account::create_resource_address` in the framework source: `bcs::to_bytes(&source) || seed || DERIVE_RESOURCE_ACCOUNT_SCHEME (0xFF)`. Source: https://github.com/Entropy-Foundation/aptos-core/blob/dev/aptos-move/framework/supra-framework/sources/account.move
 
 ---
 

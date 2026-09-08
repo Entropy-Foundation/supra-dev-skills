@@ -12,15 +12,14 @@ module my_module::leaderboard {
     use std::signer;
 
     struct Scores has key {
-        // Maps player address - score - O(1) reads, gas stays flat as it grows
+        // Maps player address - score - O(1) reads, gas stays flat as it grows.
+        // No manual counter field: smart_table::length() already knows the size.
         scores: SmartTable<address, u64>,
-        player_count: u64,
     }
 
     public entry fun initialize(admin: &signer) {
         move_to(admin, Scores {
             scores: smart_table::new(),
-            player_count: 0,
         });
     }
 
@@ -38,7 +37,6 @@ module my_module::leaderboard {
         } else {
             // Insert new entry
             smart_table::add(&mut data.scores, player, score);
-            data.player_count = data.player_count + 1;
         }
     }
 
@@ -46,7 +44,6 @@ module my_module::leaderboard {
         let data = borrow_global_mut<Scores>(signer::address_of(admin));
         if (smart_table::contains(&data.scores, player)) {
             smart_table::remove(&mut data.scores, player);
-            data.player_count = data.player_count - 1;
         }
     }
 
@@ -61,6 +58,12 @@ module my_module::leaderboard {
     #[view]
     public fun has_score(admin_addr: address, player: address): bool acquires Scores {
         smart_table::contains(&borrow_global<Scores>(admin_addr).scores, player)
+    }
+
+    // The count comes from the table itself - never from a stored counter.
+    #[view]
+    public fun player_count(admin_addr: address): u64 acquires Scores {
+        smart_table::length(&borrow_global<Scores>(admin_addr).scores)
     }
 }
 ```
@@ -247,34 +250,51 @@ module my_module::escrow {
 
 ### Multi-Agent Transaction via TypeScript SDK
 
-```typescript
-import { SupraClient, SupraAccount, HexString, TxnBuilderTypes } from "supra-l1-sdk";
+Multi-agent submission takes **authenticators**, not accounts. Build the raw transaction, wrap it in a `MultiAgentRawTransaction` along with the secondary signer addresses, have every party sign that wrapper, then submit.
 
-const client = await SupraClient.init("https://rpc-testnet.supra.com/");
+```typescript
+import { SupraClient, Network, SupraAccount, TxnBuilderTypes } from "supra-ts-sdk";
+
+const supra = new SupraClient({ network: Network.TESTNET });
 
 // Canonical constructor: Uint8Array.from(Buffer.from(..., "hex"))
 const seller = new SupraAccount(Uint8Array.from(Buffer.from("SELLER_PRIVATE_KEY_HEX", "hex")));
 const buyer  = new SupraAccount(Uint8Array.from(Buffer.from("BUYER_PRIVATE_KEY_HEX",  "hex")));
 
-// Build a multi-agent (multi-signer) transaction
-// seller is the primary signer, buyer is the secondary signer
-const sellerInfo = await client.getAccountInfo(seller.address());
-const rawTxn = await client.createRawTxObject(
-  seller.address(),
-  BigInt(sellerInfo.sequence_number),
-  new HexString("CONTRACT_ADDRESS").hex(),
-  "escrow",
-  "settle",
-  [],   // TypeTag[]
-  []    // function args - seller and buyer signers are provided separately
-);
-const txRes = await client.sendMultiAgentTransaction(
-  seller,     // primary signer (SupraAccount)
-  [buyer],    // secondary signers (SupraAccount[])
-  rawTxn
-);
-console.log("Escrow settled:", txRes.txHash);
-console.log("Escrow settled:", txRes);
+// Build the base transaction - seller is the primary signer
+const sellerInfo = await supra.account.getAccountInfo({ accountAddress: seller.address() });
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: seller.address(),
+  senderSequenceNumber: sellerInfo.sequence_number,
+  function: "0xCONTRACT_ADDRESS::escrow::settle",
+  functionTypeArgs: [],
+  functionArgs: [],   // signers are not function arguments
+});
+
+// Wrap with the secondary signers - this wrapper is what everyone signs
+const multiAgentTxn = new TxnBuilderTypes.MultiAgentRawTransaction(rawTxn, [
+  new TxnBuilderTypes.AccountAddress(buyer.address().toUint8Array()),
+]);
+
+// signTransaction returns HexString for a single-signer txn and an
+// AccountAuthenticatorEd25519 for a multi-agent one - narrow, don't cast
+const sellerAuth = supra.transaction.signTransaction({ senderAccount: seller, rawTxn: multiAgentTxn });
+const buyerAuth  = supra.transaction.signTransaction({ senderAccount: buyer,  rawTxn: multiAgentTxn });
+
+if (
+  !(sellerAuth instanceof TxnBuilderTypes.AccountAuthenticatorEd25519) ||
+  !(buyerAuth  instanceof TxnBuilderTypes.AccountAuthenticatorEd25519)
+) {
+  throw new Error("Expected Ed25519 authenticators for a multi-agent transaction");
+}
+
+const txRes = await supra.transaction.submit.submitMultiAgentTransaction({
+  secondarySignersAccountAddress: [buyer.address().toString()],
+  rawTxn,
+  senderAuthenticator: sellerAuth,
+  secondarySignersAuthenticator: [buyerAuth],
+});
+console.log("Escrow settled:", txRes.hash);
 ```
 
 ---
@@ -297,25 +317,22 @@ console.log("Escrow settled:", txRes);
 ```
 
 ```typescript
-// In TypeScript SDK - set gas parameters via OptionalTransactionPayloadArgs
-const accountInfo = await client.getAccountInfo(account.address());
-const seqNum = BigInt(accountInfo.sequence_number);
+// In TypeScript SDK - set gas parameters via optionalTransactionPayloadArgs
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
 
-const rawTx = await client.createSerializedRawTxObject(
-  account.address(),
-  seqNum,
-  "CONTRACT_ADDRESS",
-  "module_name",
-  "function_name",
-  [],          // TypeTag[]
-  [/* BCS-encoded args */],
-  {
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,   // already a bigint
+  function: "0xCONTRACT_ADDRESS::module_name::function_name",
+  functionTypeArgs: [],
+  functionArgs: [/* BCS-encoded args */],
+  optionalTransactionPayloadArgs: {
     maxGas:       BigInt(10000),  // max gas units
     gasUnitPrice: BigInt(100),    // Quants per unit
-  }
-);
-const txRes = await client.sendTxUsingSerializedRawTransaction(rawTx, account);
-console.log("TX hash:", txRes.txHash);
+  },
+});
+const txRes = await rawTxn.submitTransaction({ senderAccount: account });
+console.log("TX hash:", txRes.hash);
 ```
 
 ### Common Gas Pitfalls
@@ -329,24 +346,26 @@ console.log("TX hash:", txRes.txHash);
 ### Simulate Before Submitting
 
 ```typescript
-// Use simulateTxUsingSerializedRawTransaction - reuses the same serialized bytes
-// as sendTxUsingSerializedRawTransaction (simulateTransaction / simulateTx(account, rawTxn)
-// do NOT have those signatures in supra-l1-sdk v5)
-const accountInfo = await client.getAccountInfo(account.address());
-const serializedRawTx = await client.createSerializedRawTxObject(
-  account.address(),
-  BigInt(accountInfo.sequence_number),
-  "CONTRACT_ADDRESS",
-  "module_name",
-  "function_name",
-  [],          // TypeTag[]
-  [/* BCS-encoded args */]
-);
-const simulation = await client.simulateTxUsingSerializedRawTransaction(
-  serializedRawTx,
-  account
-);
-console.log("Estimated gas:", simulation.gas_used);
+// ExtendedRawTransaction.simulate() takes the sender account directly, so the
+// same object you simulate is the one you submit - no rebuild, no authenticator.
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0xCONTRACT_ADDRESS::module_name::function_name",
+  functionTypeArgs: [],
+  functionArgs: [/* BCS-encoded args */],
+});
+
+const simulation = await rawTxn.simulate(account);
+
+// `output` is a union - narrow to the Move variant to reach gas_used
+if (simulation.output && "Move" in simulation.output) {
+  console.log("Estimated gas:", simulation.output.Move.gas_used);
+}
+
+// Happy with the estimate? Submit the same object.
+await rawTxn.submitTransaction({ senderAccount: account });
 ```
 
 ---

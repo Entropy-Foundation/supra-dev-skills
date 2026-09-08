@@ -14,6 +14,9 @@
 #
 # All supra CLI commands only work inside the container.
 # Running this from the host shell will fail.
+#
+# No Docker? Deploy from the browser instead: https://ide.supra.com
+# (see references/supra_ide_deploy.md). Same Move package, signed by StarKey.
 # ============================================================
 
 PACKAGE_NAME=${1:-""}
