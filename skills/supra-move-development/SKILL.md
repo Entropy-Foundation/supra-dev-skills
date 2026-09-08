@@ -946,8 +946,8 @@ See `references/sdk_guide.md` for complete SDK reference including multi-agent t
 
 ### TypeScript - Install
 ```bash
-npm install supra-ts-sdk           # latest (currently 1.0.0)
-npm install supra-ts-sdk@1.0.0     # pin for production
+npm install supra-ts-sdk           # latest (currently 1.1.0)
+npm install supra-ts-sdk@1.1.0     # pin for production
 ```
 
 > -- `supra-ts-sdk` replaces the older `supra-l1-sdk`. It depends on `supra-l1-sdk-core` internally, so that package still shows up in `npm ls` — never install or import it directly.
