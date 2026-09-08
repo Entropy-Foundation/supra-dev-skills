@@ -28,7 +28,8 @@ module my_module::registry {
     struct Registry has key {
         members: vector<address>,
         names: vector<String>,
-        count: u64,
+        // No count field: vector::length(&members) is the count. A stored
+        // counter only adds gas and a desync bug (see SKILL.md, DATA STRUCTURES).
     }
 
     // ============================================================
@@ -58,7 +59,6 @@ module my_module::registry {
         move_to(admin, Registry {
             members: vector::empty(),
             names: vector::empty(),
-            count: 0,
         });
 
         event::emit(RegistryCreated { creator: admin_addr });
@@ -78,13 +78,12 @@ module my_module::registry {
         // Add member
         vector::push_back(&mut registry.members, new_member);
         vector::push_back(&mut registry.names, string::utf8(name));
-        registry.count = registry.count + 1;
 
         // Emit event
         event::emit(MemberRegistered {
             member: new_member,
             name: string::utf8(name),
-            total_members: registry.count,
+            total_members: vector::length(&registry.members),
         });
     }
 
@@ -95,7 +94,7 @@ module my_module::registry {
     #[view]
     public fun get_member_count(registry_addr: address): u64 acquires Registry {
         assert!(exists<Registry>(registry_addr), E_NOT_INITIALIZED);
-        borrow_global<Registry>(registry_addr).count
+        vector::length(&borrow_global<Registry>(registry_addr).members)
     }
 
     #[view]

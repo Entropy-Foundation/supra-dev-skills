@@ -1,6 +1,327 @@
 # Changelog
 
-All notable changes to the Supra Dev Skill are documented here.
+All notable changes to the Supra Dev Skills plugin are documented here.
+
+---
+
+## [4.0.0] — September 2026
+
+First release of the repo as a Claude Code **plugin** with three skills
+(`supra-move-development`, `supra-wallet-connect-skill`, `supra-ts-sdk-skill`).
+The individual skills now carry the plugin version.
+
+### Security
+
+- **Sign-in signatures were replayable.** The client signed the constant
+  `AUTH_MESSAGE` and sent the nonce alongside it. `create-jwt` validated the
+  nonce, but StarKey signs only the message bytes, so nothing tied the nonce to
+  the signature: one captured `{ signature, publicKey }` minted a JWT for that
+  address with any fresh nonce, indefinitely. `lib/auth-constants.ts` now exports
+  `authMessageFor(nonce)` (`AUTH_MESSAGE + "\n\nNonce: <nonce>"`); every client
+  sign-in path signs it and `create-jwt` verifies it. Documented in
+  `references/auth-architecture.md`.
+- `signIn()` wrote the JWT to `localStorage` and set a cookie from JavaScript
+  with an `HttpOnly` flag browsers ignore from script. It now posts to
+  `/api/auth/wallet-login` like every other path, so the only copy of the token
+  is the server-set httpOnly cookie.
+- `verifyWalletSignature` decodes hex with the file's own `hexToBytes` instead
+  of `Buffer`, which the edge runtime does not guarantee.
+
+### Added
+
+- **Supra Move IDE deployment path** (`skills/supra-move-development`). The
+  skill now defaults to https://ide.supra.com for compiling and deploying:
+  Compile / Test / Deploy buttons, StarKey-signed publish, Testnet and Mainnet
+  selector, faucet, and the Contract Interactions tab. New
+  `references/supra_ide_deploy.md` with the full walkthrough for both networks
+  and the Move.toml named-address rule; `SKILL.md` SETUP section rewritten as
+  "IDE or CLI"; README quickstart uses the IDE. Docker CLI remains as Option B.
+- `useSupraWalletContext()` in `components/WalletProvider.tsx`. The provider now
+  actually provides its hook instance through context; `useSupraWalletWithRefresh`
+  is a deprecated alias for it.
+- `references/starkey_integration.md` (Move skill) rewritten as a current
+  summary of the StarKey provider API with a pointer to the wallet skill.
+
+### Changed — BREAKING
+
+- **`sendRawTransaction` builds with `supra-ts-sdk`, not StarKey's
+  `createRawTransactionData()`.** StarKey marks that provider method deprecated
+  and points at the SDK builder. The hook now fetches the sequence number with
+  `supra.account.getAccountInfo`, builds via
+  `supra.transaction.build.rawTxnObject`, and passes the hex bytes in
+  `sendTransaction.data` with `to: ''`. `runTimeParams` accepts type-tag strings
+  or `TypeTag` objects. Resolves to `null` when the user declines.
+- The hook reads accounts with `provider.accounts()` (falling back to the
+  deprecated `account()` only on builds that lack it).
+- `WalletProvider` no longer remounts its subtree (through a changing `key`) on
+  every wallet-connected event; that threw away consumers' local state on login.
+- `signMessage` no longer mutates the `accounts` state array and no longer sends
+  `nonce` to the wallet (StarKey's `signMessage` takes only `{ message }`); the
+  parameter stays for source compatibility. The `isSigningWallet` latch is now
+  released when the wallet throws.
+- `ConnectWalletHandler.onConnect` fires from the hook's `wallet-connected` event
+  with the authenticated account. It previously read `accounts[0]` right after
+  `await connectWallet()`, which is the pre-connect value, so on a first connect
+  it never fired.
+- **TypeScript SDK migrated from `supra-l1-sdk` / `supra-l1-sdk-core` to `supra-ts-sdk`.**
+  Every install command, import, and client example across all three skills now
+  targets `supra-ts-sdk` (currently `1.0.0`). No file in this repo installs or
+  imports the old packages any more.
+- `SupraClient` is now namespaced and its constructor is **synchronous**:
+  `await SupraClient.init(url)` → `new SupraClient({ network: Network.TESTNET })`.
+  Calls move onto `supra.account`, `supra.coin`, `supra.faucet`, `supra.methods`
+  and `supra.transaction.{build,simulate,submit}`.
+- Transaction responses expose `hash`, not `txHash`.
+- `getAccountInfo(...).sequence_number` is typed `bigint` — the old
+  `BigInt(accountInfo.sequence_number)` wrapper is gone.
+- `useConversionUtils` now imports `BCS` / `TxnBuilderTypes` from `supra-ts-sdk`.
+  Its behavior is unchanged: `supra-ts-sdk` re-exports `BCS`, `HexString`,
+  `SupraAccount`, `TxnBuilderTypes`, and `TypeTagParser` from `supra-l1-sdk-core`
+  as the same classes.
+
+> `supra-ts-sdk@1.0.0` depends on `supra-l1-sdk-core@^2.0.1`, so that package
+> still appears in a downstream `npm ls`. That is expected and correct — what
+> this migration removes is the **direct** dependency.
+
+### Fixed (SDK snippets)
+
+Three SDK snippets were wrong against `supra-l1-sdk` v5 as well, so they were
+rewritten rather than renamed:
+
+- **Multi-agent transaction** (`patterns.md`) passed `SupraAccount`s to
+  `sendMultiAgentTransaction`, whose v5 signature takes secondary signer
+  *addresses* and *authenticators*. Replaced with the real flow — wrap in
+  `TxnBuilderTypes.MultiAgentRawTransaction`, sign per party, then submit.
+- **Simulation** (`patterns.md`, `sdk_guide.md`) called
+  `simulateTxUsingSerializedRawTransaction(serializedRawTx, account)` with the
+  arguments reversed; v5 takes `(txAuthenticator, serializedRawTransaction)`.
+  Replaced with the fluent `rawTxn.simulate(account)`, which does take an account.
+  Gas is read from `simulation.output.Move.gas_used` behind a union narrowing.
+- **View function** (`sdk_guide.md`, `SKILL.md`) passed five positional arguments
+  with BCS-encoded values to `invokeViewMethod`, whose v5 signature takes three
+  and expects plain strings. Replaced with
+  `supra.methods.view({ function, typeArguments, functionArguments })`.
+
+### Fixed (Move skill)
+
+- `references/native_features.md` dVRF example aborted with an undeclared
+  constant (`E_NOT_INITIALIZED`); it now declares and uses `E_UNKNOWN_NONCE`.
+  Unused `String` and `signer` imports removed there and in the `SKILL.md`
+  dVRF example.
+- `SKILL.md` claimed Fungible Assets are usable on Mainnet while
+  `supra_vs_aptos.md` and `object_model.md` said migration is disabled. Now
+  aligned with the official cheatsheet: coin standard for Mainnet tokens,
+  `coin_wrapper` for FA.
+- `references/resource_accounts.md` TypeScript derivation inserted a seed-length
+  byte; the framework's `create_resource_address` appends the seed raw
+  (`bcs::to_bytes(&source) || seed || 0xFF`). Also corrected the list of
+  `AccountAddress` members (no `toUint8Array`, no `standardizeAddress`).
+- `references/patterns.md` leaderboard kept a manual `player_count`, which
+  `SKILL.md` forbids; replaced with `smart_table::length`. Same fix in
+  `scripts/events_example.move` (`vector::length`).
+- `scripts/advanced_examples.move`: `assert_not_paused` is now actually called
+  (from `mint_nft`), the unused `E_NOT_FOUND` is gone, and every error constant
+  has a comment as the skill requires.
+- Rule 2's Unicode table showed ASCII in both columns; the offending characters
+  are back in the "You might write" column.
+- StarKey documentation links updated: the `getting-started/*` pages are gone;
+  the provider reference is `docs.starkey.app/supra/api-reference`.
+
+### Fixed (wallet skill docs)
+
+- `references/sending-transactions.md` said SupraCoin uses 7 decimals internally
+  one line after saying 8. SUPRA has 8; read `decimals` for other coins.
+- `SKILL.md`, `hook-api.md`, `troubleshooting.md`, `starkey-runtime-quirks.md`
+  and `auth-architecture.md` updated for the nonce-in-message rule, the SDK
+  transaction builder, `accounts()`, and the context hook. Removed the stale
+  "update the message in all three places" instruction and the leftover
+  `view` / `create_file` tool names.
+
+### Packaging
+
+- One version everywhere: plugin manifest, README badge and the Move skill
+  frontmatter all say 4.0.0. `.claude-plugin/marketplace.json` gained a
+  description (the validator warned on its absence). Duplicate `.claude/` line
+  removed from `.gitignore`. `supra-ts-sdk-skill` notes that it mirrors the skill
+  shipped inside the `supra-ts-sdk` npm package and should be re-synced from there.
+
+### Renamed
+
+Ribbit support was removed in 3.1.x, leaving Starkey as the only wallet, so the
+"multiwallet" naming is gone.
+
+- Skill renamed: `supra-multiwallet-skill` → `supra-wallet-connect-skill`. The
+  directory moved to `skills/supra-wallet-connect-skill/` and the invocation
+  name is now `supra-dev-skills:supra-wallet-connect-skill`. Reinstall the
+  plugin to pick it up.
+- Hook renamed: `useSupraMultiWallet` → `useSupraWallet`, and the file it ships
+  as, `assets/hooks/useSupraMultiWallet.ts` → `assets/hooks/useSupraWallet.ts`.
+- `UseSupraMultiWalletOptions` → `UseSupraWalletOptions`,
+  `useSupraMultiWalletWithRefresh` → `useSupraWalletWithRefresh`.
+
+### Migration
+
+In a project that copied an earlier version, rename the hook file and then:
+
+    sed -i 's/useSupraMultiWalletWithRefresh/useSupraWalletWithRefresh/g;
+            s/UseSupraMultiWalletOptions/UseSupraWalletOptions/g;
+            s/useSupraMultiWallet/useSupraWallet/g' <your files>
+
+No environment variable, API route path, or wallet behavior changed.
+
+---
+
+## [3.1.0] — August 2026
+
+Starkey runtime correctness pass on `supra-multiwallet-skill`, from defects found
+while shipping a production Starkey dApp against version 3.0.0. Everything below
+was reproducible in the shipped template.
+
+### Security
+
+- **`verifyWalletSignature` did not bind the public key to the claimed address** —
+  an authentication bypass. `nacl.sign.detached.verify` only proves the caller
+  holds *some* key; the shipped code left the address check as a `TODO` and
+  returned `true`. An attacker could sign `AUTH_MESSAGE` with their own key, send
+  any `address`, and receive a JWT for it. `lib/auth.ts` now derives the address
+  the key controls — `sha3_256(pubkey || 0x00)`, Supra's Aptos-inherited
+  single-Ed25519 scheme — and compares it with the claim. Adds a `js-sha3`
+  dependency (pure JS, edge-safe). Documented in `references/auth-architecture.md`,
+  including the rotated-key / multi-key limitation this derivation carries.
+- **`sendRawTransaction` signed as `accounts[0]` without checking the wallet was
+  still on that account.** After an account switch whose re-auth failed, the app
+  could sign as account B while the session claimed account A. It now re-reads the
+  exposed account and refuses on a mismatch.
+
+### Critical Fixes
+
+- **Account switches were listened for on the wrong transport.** The hook reacted
+  only to the `starkey-*` `window.postMessage` events. Those are the extension's
+  internal page-to-content-script bridge, not its API, and current builds do not
+  deliver an account switch to the page that way — so switching account in Starkey
+  did nothing until the user reloaded. The hook now subscribes to Starkey's
+  documented events (`provider.on('accountChanged' | 'networkChanged' |
+  'disconnect')`), once per mount, with handlers reading live state through refs
+  and `off`/`removeListener` feature-tested on teardown. The window messages stay
+  as a fallback and route into the same handler.
+- **Token revalidation could never succeed.** `signIn()` and
+  `checkAndRevalidateToken()` signed `'Sign message to revalidate login to …'` and
+  `'Token Expiry: …'`, while `create-jwt` verifies exactly one string — so both
+  returned 401 every time and the only recovery was a full reconnect. All call
+  sites now import `AUTH_MESSAGE` from `lib/auth-constants.ts`, and pass
+  `forceSign` so the `isSigningWallet` latch cannot swallow the prompt.
+- **`lib/auth-constants.ts` was shipped in 3.0.0 but nothing imported it.** The
+  hook still had four hardcoded copies of the message and `create-jwt` declared
+  its own fifth. Now genuinely one source of truth; `SKILL.md` Step 4 no longer
+  asks for a five-place find-and-replace.
+
+### Significant Fixes
+
+- **A single `account()` read decided a connected wallet was gone.**
+  `window.starkey` is injected before the extension's background side can answer,
+  so the first read after a page load routinely resolves `[]` on a connected
+  wallet — which signed the user out on every refresh. Added
+  `readStarkeyAccount`: 8 attempts, 250 ms apart, first non-empty wins.
+- **`changeNetwork` was trusted to report what it did.** Starkey's mobile dApp
+  browser rejects it with `Unrecognized chain ID.` *after* performing the switch,
+  so connect failed on mobile with the wallet on the correct chain. New
+  `lib/starkey-network.ts` (`ensureChain`) decides by reading the chain back, and
+  quotes the wallet's rejection text — the only diagnostic available in a browser
+  with no console. Also catches the opposite lie: a call that resolves and
+  changes nothing.
+- **`switchToChain()` was a no-op on first connect.** It guarded on
+  `selectedChainId`, which callers set with `setSelectedChainId()` in the same
+  tick, so React had not committed it when the guard ran. The chain id is now
+  passed as an argument.
+- **Addresses were compared as raw strings.** New `lib/address.ts`
+  (`normalizeAddress`, `sameAddress`) — the extension, Move view responses, JWT
+  claims and `localStorage` disagree about zero-padding and case for the same
+  account, which produced phantom account switches and re-auth loops.
+- **The account-switch handler logged the user out before the new credential
+  existed.** It called `wallet-logout` first, then asked for a signature; a
+  declined prompt left the session gone, wallet state populated, and
+  `resetWalletData()` never called. Now: acquire, swap on success, reset
+  explicitly on failure.
+- **Nothing re-rendered Server Components after a wallet change.** A wallet change
+  is client-side, so any Server Component reading the auth cookie kept rendering
+  the previous wallet's data. New `assets/components/WalletSessionSync.tsx`
+  compares the connected address with the one the page was rendered with and calls
+  `router.refresh()` on divergence. Wired through a new optional
+  `<WalletProvider serverAddress={…}>` prop, so it is one line in the layout
+  rather than a component to remember per page.
+- **The connect modal was a dead end on mobile.** `ConnectWalletHandler` only
+  rendered wallets where `isInstalled` was true, so on a phone — where a browser
+  extension cannot exist at all — the list was empty and the fallback read
+  "Please install a wallet extension". It now shows an **Open in Starkey** row
+  that hands the current URL to Starkey's in-app dApp browser. Handheld detection
+  runs in an effect, not during render, to avoid a hydration mismatch.
+- **Extension detection gave up after five seconds, permanently.** A user who
+  installed Starkey from the app's own prompt, or unlocked a locked wallet a
+  minute later, stayed on the not-installed branch until reload. Detection now
+  polls for as long as the component is mounted, is idempotent so callers cannot
+  stack intervals, and clears on unmount.
+- **Two fast clicks opened two approval popups.** `connectWallet` guarded nothing
+  synchronously — `setLoading(true)` is only visible after React commits. Added an
+  `inFlight` ref covering connect and transaction sends.
+- **An account switch could raise one signature prompt per listener.** Several
+  instances of the hook are alive at once in this template (`WalletProvider` calls
+  it, so does the connect modal) and each subscribes to `accountChanged`; the
+  window-message fallback can report the same switch again. Per-instance state
+  updates are wanted, but the re-auth is a one-time side effect, so it is now
+  claimed through a module-scoped guard keyed on the normalized address.
+- **The account-switch re-auth posted the wrong payload.** It destructured
+  `const { signature } = signResult` and sent only that, while `create-jwt`
+  requires both `signature` and `publicKey` — so every switch answered 400
+  `Invalid signature format`. It now sends the whole `signMessage` result, as the
+  connect path already did.
+
+### Minor Fixes
+
+- `provider.connect()` is now called as `provider.connect({ chainId })`, so the
+  approval sheet opens on the target network. Extensions that ignore the argument
+  drop it; `ensureChain` still runs after either way.
+- The `PRESIGNED_STATE` / `POSTSIGNED_STATE` events carried `accounts[0]` — state
+  that had not committed inside that closure — so consumers received the
+  *previously* connected account, or `undefined` on a first connect. They now
+  carry the account just read.
+- `disconnectWallet` no longer calls `router.push('/')` from inside the hook.
+  Routing is the caller's decision via a new `useSupraMultiWallet({ onDisconnect })`
+  option; the old behaviour yanked users out of modals and nested layouts.
+- `updateBalance` accepts the address to read, so the balance is no longer blank
+  after a first connect (it previously guarded on a not-yet-committed `accounts`).
+
+### Documentation
+
+- **New `references/starkey-runtime-quirks.md`** — the document whose absence
+  caused most of the above. What the extension actually does: which events report
+  an account switch, why the first `account()` comes back empty, why
+  `changeNetwork` lies in the mobile dApp browser, address shapes by source,
+  detection with no natural end, and why a phone browser has no provider at all.
+  Linked from `SKILL.md` as required reading before touching event or network code.
+- **`references/troubleshooting.md`** — eight new entries keyed to the symptom a
+  developer actually searches for, from "switching account does nothing until I
+  reload" to "anyone can obtain a session for an address they do not control".
+- **`SKILL.md`** — the "Key things to remember" entry that described the
+  `starkey-*` window messages as Starkey's event surface has been replaced; it was
+  teaching the defect. Adds the Server Component resync rule, the read-back rule
+  for both things the wallet lies about, and three mandatory test steps (switch
+  account with the page open, reload, connect from the mobile dApp browser) that a
+  desktop-only happy-path test always passes by accident.
+- **`references/hook-api.md`** — options table, the provider event list, and the
+  one-prompt-at-a-time concurrency contract.
+- **`references/no-auth-mode.md`** — now shows which half of the account-switch
+  handler to strip, instead of implying the whole handler can go.
+
+### Known limitations
+
+- Not runtime-verified against every Starkey build. The event transport, the empty
+  first read, and the `changeNetwork` behaviour are grounded in Starkey's docs and
+  in a reproduction in a production dApp, not in a matrix of extension versions.
+- Whether Starkey exposes `off` or `removeListener` is undocumented either way,
+  which is why the subscription feature-tests both and tolerates neither existing.
+- `deriveSupraAddress` covers single-Ed25519 accounts that have not rotated their
+  key. Rotated-key and multi-key accounts cannot sign in without an on-chain
+  authentication key lookup.
 
 ---
 
@@ -13,7 +334,7 @@ All notable changes to the Supra Dev Skill are documented here.
 
 ### Significant Fixes
 - **`simulateTx` signature** — `client.simulateTx(account, rawTxn)` does not exist. Replaced with `simulateTxUsingSerializedRawTransaction(serializedRawTx, account)` in both `sdk_guide.md` and `patterns.md`. Added explicit warning that the old signature does not exist.
-- **`AccountAddress.fromDerivationPath`** — Method does not exist in `supra-l1-sdk`. Removed from `resource_accounts.md` and replaced with manual `sha3_256` derivation using `js-sha3`, with the correct domain separator (`0xFF`) and byte layout documented.
+- **`AccountAddress.fromDerivationPath`** — Method does not exist in the `TxnBuilderTypes` re-exported by `supra-ts-sdk`. Removed from `resource_accounts.md` and replaced with manual `sha3_256` derivation using `js-sha3`, with the correct domain separator (`0xFF`) and byte layout documented.
 - **`advanced_examples.move` transfer_nft** — Added prominent `DEMO PATTERN — NOT PRODUCTION SAFE` comment explaining the ownership limitation (only collection admin can hold transferable NFTs in this pattern).
 - **README version** — Updated from 2.0.0 to 2.1.0 to match SKILL.md.
 
@@ -57,7 +378,7 @@ All notable changes to the Supra Dev Skill are documented here.
 - **README.md** — Added "How to Load This Skill into Claude Code" section (three options: CLAUDE.md import, direct read, copy).
 
 ### BCS encoding table
-- Fixed `address` encoding: `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` (not `BCS.bcsToBytes(...)`)
+- Fixed `address` encoding to `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()`. **Superseded — that method does not exist on `AccountAddress`;** the correct form is `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))`; corrected in this migration.
 - Added `BCS.bcsSerializeStr` for string/vector<u8> arguments
 - Added Python `Serializer` encoder reference table
 
@@ -81,7 +402,7 @@ All notable changes to the Supra Dev Skill are documented here.
 - Multi-signer (multi-agent) transaction pattern with TypeScript SDK example
 - Upgrade/migration guidance: compatible publish, new module + migration, resource account proxy
 - `init_module` auto-setup pattern documented
-- Version pinning guidance for TypeScript SDK (`npm install supra-l1-sdk@x.y.z`)
+- Version pinning guidance for TypeScript SDK (`npm install supra-ts-sdk@x.y.z`)
 
 ### Improved
 - SKILL.md fully restructured into named sections (SETUP, MOVE LANGUAGE, DATA STRUCTURES, SUPRA SPECIFICS, COMMON PATTERNS, NATIVE FEATURES, SDK, TESTING, UPGRADE, NETWORK)

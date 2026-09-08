@@ -2,7 +2,7 @@
 //
 // Demonstrates:
 // - Admin + Pausable contracts (with assert_not_paused enforced)
-// - NFT / Digital Asset collection using Table (O(1) lookup - not vector)
+// - NFT / Digital Asset collection using aptos_token_objects (0x4)
 // - Timelock pattern with correct error code
 // - Access control with named error constants
 
@@ -35,13 +35,12 @@ module my_module::advanced {
     // ============================================================
     // Error Codes
     // ============================================================
-    const E_NOT_ADMIN: u64 = 1;
-    const E_PAUSED: u64 = 2;
-    const E_NOT_INITIALIZED: u64 = 3;
-    const E_ALREADY_EXISTS: u64 = 4;
-    const E_NOT_FOUND: u64 = 5;
-    const E_TIMELOCK_NOT_READY: u64 = 6;
-    const E_ALREADY_EXECUTED: u64 = 7;  // distinct from E_ALREADY_EXISTS
+    const E_NOT_ADMIN: u64 = 1;           // caller is not the admin (or, for burn, not the owner)
+    const E_PAUSED: u64 = 2;              // contract is paused
+    const E_NOT_INITIALIZED: u64 = 3;     // AdminConfig has not been created for this address
+    const E_ALREADY_EXISTS: u64 = 4;      // AdminConfig already exists at this address
+    const E_TIMELOCK_NOT_READY: u64 = 5;  // unlock_time has not been reached yet
+    const E_ALREADY_EXECUTED: u64 = 6;    // timelock action already ran; distinct from E_ALREADY_EXISTS
 
     // ============================================================
     // Pattern 1: Admin + Pausable Contract
@@ -153,7 +152,11 @@ module my_module::advanced {
         name: vector<u8>,
         description: vector<u8>,
         uri: vector<u8>,
-    ) {
+    ) acquires AdminConfig {
+        // Minting is blocked while the creator's contract is paused.
+        // Requires initialize_admin() to have run for this creator first.
+        assert_not_paused(signer::address_of(creator));
+
         let constructor_ref = token::create_numbered_token(
             creator,
             string::utf8(COLLECTION_NAME),

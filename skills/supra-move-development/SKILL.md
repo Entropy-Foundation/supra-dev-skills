@@ -1,7 +1,7 @@
 ---
-name: Supra Move Development
-description: Expert guidance for building on the Supra blockchain using Move - contracts, SDK integration, dVRF, Oracles, and Automation.
-version: 2.5.0
+name: supra-move-development
+description: Expert guidance for building on the Supra blockchain using Move - writing contracts, compiling and deploying to Testnet or Mainnet with the browser Supra Move IDE (ide.supra.com) or the Docker CLI, SDK integration, dVRF, Oracles, and Automation.
+version: 4.0.0
 ---
 
 # Supra Move Development Skill
@@ -54,13 +54,13 @@ Characters that will always break compilation:
 
 | You might write | Unicode | Use this instead |
 |---|---|---|
-| `--` (em dash) | U+2014 | `--` |
-| `-` (en dash) | U+2013 | `-` |
-| `---` (box drawing) | U+2500 | `-` |
-| `~=` (almost equal) | U+2248 | `~=` |
-| `->` (arrow) | U+2192 | `->` |
-| `'` `'` (curly quotes) | U+2018/19 | `'` |
-| `"` `"` (curly double quotes) | U+201C/D | `"` |
+| `—` (em dash) | U+2014 | `--` |
+| `–` (en dash) | U+2013 | `-` |
+| `─` (box drawing) | U+2500 | `-` |
+| `≈` (almost equal) | U+2248 | `~=` |
+| `→` (arrow) | U+2192 | `->` |
+| `‘` `’` (curly quotes) | U+2018/19 | `'` |
+| `“` `”` (curly double quotes) | U+201C/D | `"` |
 | `✅` `❌` `⚠️` and any emoji | various | write it out in words |
 
 **Do not use emoji or symbols in comments.** Write `// OK: caller is whitelisted` not `// ✅ caller is whitelisted`. Write `// WARNING:` not `// ⚠️`. No exceptions.
@@ -176,16 +176,40 @@ The rule "replace aptos_ with supra_" applies **only to `aptos_framework::`**. T
 
 ## SKILL VERSION
 
-- Version: 2.5.0
+- Version: 4.0.0 (tracks the supra-dev-skills plugin version)
 - Last Updated: See CHANGELOG.md
-- Tested Against: Supra CLI (latest)
+- Tested Against: Supra CLI (latest) and the Supra Move IDE (https://ide.supra.com)
 - Framework: supra_framework (pin rev for production - see warning above)
 
 ---
 
 ## SECTION: SETUP
 
-### Prerequisites
+There are two ways to compile and deploy. Pick one before writing any commands.
+
+| | Supra Move IDE (browser) | Supra CLI (Docker) |
+|---|---|---|
+| Install | Nothing - open https://ide.supra.com | Docker Desktop + the CLI container |
+| Signs deploys with | StarKey wallet (or an IDE local wallet) | CLI key profile |
+| Networks | Testnet / Mainnet selector | `--rpc-url` per command |
+| Best for | First deploy, demos, anyone without Docker | CI, scripting, `deploy.sh`, Automation registration |
+
+**Default to the IDE when the user has not asked for the CLI.** It is the fastest path from a finished `.move` file to a live module on either network. Full walkthrough: `references/supra_ide_deploy.md`.
+
+### Option A - Supra Move IDE (no install)
+
+1. Open https://ide.supra.com and create a project (blank or from a template), or import a `.zip` of the package you wrote.
+2. Put the module code under `sources/` and set the named address in `Move.toml` to the address of the wallet that will deploy (see the note below).
+3. **Compile**, then **Test** if the package has tests. The Console shows errors.
+4. **Connect StarKey** (or create an IDE local wallet). Pick **Testnet** or **Mainnet** in the network selector; on Testnet, click **Faucet** for test SUPRA.
+5. **Deploy**. StarKey asks you to approve a `0x1::code::publish_package_txn` transaction. The Console prints the SupraScan link.
+6. Call your functions from the **Contract Interactions** tab (**View** is free, **Run** signs a transaction).
+
+> **Move.toml address for the IDE:** the package is published under the connected wallet, so the named address in `[addresses]` must be that wallet's address (`my_module = "0x<connected wallet>"`). A placeholder or a different address fails at publish time. Mainnet has no faucet: the wallet needs real SUPRA for gas.
+
+### Option B - Supra CLI (Docker)
+
+Prerequisites:
 - Docker Desktop installed and running
 - All Supra CLI commands run inside a Docker container
 
@@ -336,7 +360,7 @@ use aptos_std::table::{Self, Table};      // O(1) key-value storage
 use aptos_std::smart_table::{Self, SmartTable}; // iterable key-value storage
 ```
 
-> **`string::utf8` requires an import.** Always add `use std::string::{Self, String}` when using `string::utf8(b"...")`. Fully-qualified paths (`std::string::utf8(...)`) compile but are inconsistent - use the import form.
+> **`string::utf8` requires an import.** Add `use std::string;` when using `string::utf8(b"...")`, and `use std::string::{Self, String};` when the module also uses the `String` type. Import only what the module uses - an unused alias is a compiler warning. Fully-qualified paths (`std::string::utf8(...)`) compile but are inconsistent - use the import form.
 
 ---
 
@@ -578,7 +602,7 @@ SupraCoin units: 1 SUPRA = 100,000,000 Quants (8 decimals).
 
 ### Fungible Assets (FA)
 
-The FA standard (`supra_framework::fungible_asset`) is enabled on both Testnet and Mainnet. You can use it directly for custom fungible tokens. See `scripts/token_contract.move` for the coin-standard approach if you need the legacy `supra_framework::coin` pattern.
+The `supra_framework::fungible_asset` module exists on both networks, but **coin-to-FA migration is disabled on Mainnet**, and the official Aptos-to-Supra cheatsheet says to use the `coin_wrapper` example for the FA standard. For a custom token that must work on Mainnet today, use the `supra_framework::coin` standard (`scripts/token_contract.move`). Treat FA as Testnet-first and re-check https://docs.supra.com/network/move/aptos-to-supra-cheatsheet before shipping an FA token to Mainnet. `references/supra_vs_aptos.md` and `references/object_model.md` say the same thing.
 
 ---
 
@@ -740,9 +764,7 @@ module my_module::lottery {
     use aptos_std::table;
     use supra_addr::supra_vrf;
     use supra_addr::deposit::{Self, SupraVRFPermit};
-    use std::string::{Self, String};
-    use supra_framework::event;
-    use std::signer;
+    use std::string;
 
     // Each module that calls rng_request must define its own permit struct.
     // The type parameter in SupraVRFPermit<T> ties access control to this module.
@@ -924,64 +946,58 @@ See `references/sdk_guide.md` for complete SDK reference including multi-agent t
 
 ### TypeScript - Install
 ```bash
-npm install supra-l1-sdk           # latest (currently 5.0.2)
-npm install supra-l1-sdk@5.0.2    # pin for production
+npm install supra-ts-sdk           # latest (currently 1.0.0)
+npm install supra-ts-sdk@1.0.0     # pin for production
 ```
 
-> -- Version `@2.0.0` does not exist on npm - published versions start at `3.0.0`.
+> -- `supra-ts-sdk` replaces the older `supra-l1-sdk`. It depends on `supra-l1-sdk-core` internally, so that package still shows up in `npm ls` — never install or import it directly.
 
 ### TypeScript - State-Modifying Contract Call
 
-> -- There is **no `invokeContractFunction`** method. The real pattern is `createSerializedRawTxObject` - `sendTxUsingSerializedRawTransaction`.
+> -- The client is namespaced: build via `supra.transaction.build`, then submit off the returned object.
 
 ```typescript
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from "supra-l1-sdk";
+import { SupraClient, Network, SupraAccount, BCS, TxnBuilderTypes } from "supra-ts-sdk";
 
-const client  = await SupraClient.init("https://rpc-testnet.supra.com/");
+const supra   = new SupraClient({ network: Network.TESTNET });   // synchronous
 const account = new SupraAccount(Uint8Array.from(Buffer.from("PRIVATE_KEY_HEX", "hex")));
 
-// Get sequence number (required for every transaction)
-const accountInfo = await client.getAccountInfo(account.address());
-const seqNum = BigInt(accountInfo.sequence_number);
+// Get sequence number (required for every transaction) - already a bigint
+const accountInfo = await supra.account.getAccountInfo({ accountAddress: account.address() });
 
 // Call: public entry fun register(admin: &signer, member: address, name: vector<u8>, score: u64)
-const rawTx = await client.createSerializedRawTxObject(
-  account.address(),          // sender
-  seqNum,                     // sequence number (bigint)
-  "0xYOUR_CONTRACT_ADDRESS",  // module address
-  "registry",                 // module name
-  "register",                 // function name
-  [],                         // TypeTag[] - empty if no generic params
-  [
-    TxnBuilderTypes.AccountAddress.fromHex("0xbeef").toUint8Array(), // address
+const rawTxn = supra.transaction.build.rawTxnObject({
+  senderAddress: account.address(),
+  senderSequenceNumber: accountInfo.sequence_number,
+  function: "0xYOUR_CONTRACT_ADDRESS::registry::register",
+  functionTypeArgs: [],       // TypeTag[] - empty if no generic params
+  functionArgs: [
+    BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0xbeef")), // address
     BCS.bcsSerializeStr("Alice"),                                     // string/vector<u8>
     BCS.bcsSerializeUint64(BigInt(100)),                              // u64
-  ]
-);
-const response = await client.sendTxUsingSerializedRawTransaction(rawTx, account);
-console.log("TX hash:", response.txHash);
+  ],
+});
+const response = await rawTxn.submitTransaction({ senderAccount: account });
+console.log("TX hash:", response.hash);
 ```
+
+> -- `supra.transaction.build.simple({ ... })` takes plain JavaScript values instead of BCS bytes if you don't need control over the encoding.
 
 ### TypeScript - View Function Call
 
-> Use `invokeViewMethod` (not `invokeContractFunction`) for read-only calls.
-
 ```typescript
-const result = await client.invokeViewMethod(
-  "0xYOUR_CONTRACT_ADDRESS", "leaderboard", "get_score",
-  [],
-  [
-    TxnBuilderTypes.AccountAddress.fromHex("REGISTRY_ADDR").toUint8Array(),
-    TxnBuilderTypes.AccountAddress.fromHex("PLAYER_ADDR").toUint8Array(),
-  ]
-);
+const result = await supra.methods.view({
+  function: "0xYOUR_CONTRACT_ADDRESS::leaderboard::get_score",
+  typeArguments: [],
+  functionArguments: ["REGISTRY_ADDR", "PLAYER_ADDR"],   // plain values, not BCS bytes
+});
 ```
 
-**BCS encoding reference:**
+**BCS encoding reference** (for `build.rawTxnObject`, whose `functionArgs` is `Uint8Array[]`):
 
 | Move type | TypeScript |
 |---|---|
-| `address` | `TxnBuilderTypes.AccountAddress.fromHex("0x...").toUint8Array()` |
+| `address` | `BCS.bcsToBytes(TxnBuilderTypes.AccountAddress.fromHex("0x..."))` |
 | `u8` | `BCS.bcsSerializeU8(42)` |
 | `u64` | `BCS.bcsSerializeUint64(BigInt(1000))` |
 | `u128` | `BCS.bcsSerializeU128(BigInt("999"))` |
@@ -1062,7 +1078,7 @@ supra move tool publish \
   --profile myAccount \
   --rpc-url https://rpc-testnet.supra.com
 ```
-You can also set `upgrade_policy = "immutable"` in `Move.toml` under `[package]`.
+You can also set `upgrade_policy = "immutable"` in `Move.toml` under `[package]`. In the Supra Move IDE, an upgrade is simply **Deploy** again from the same wallet with the changed code; the policy comes from `Move.toml`.
 
 See `references/patterns.md` for full upgrade code examples.
 
@@ -1075,11 +1091,12 @@ See `references/patterns.md` for full upgrade code examples.
 | Testnet | https://rpc-testnet.supra.com |
 | Mainnet | https://rpc-mainnet.supra.com |
 
-- Explorer: https://suprascan.io
-- Wallet: StarKey - https://starkey.app
+- Explorer: https://suprascan.io (Testnet: https://testnet.suprascan.io)
+- Browser IDE: https://ide.supra.com (docs: https://docs.supra.com/network/move/dev/supra-move-ide)
+- Wallet: StarKey - https://starkey.app (provider API: https://docs.starkey.app/supra/api-reference)
 - Supra Docs: https://docs.supra.com
 - Framework Source: https://github.com/Entropy-Foundation/aptos-core/tree/dev/aptos-move/framework/supra-framework
-- TypeScript SDK: https://github.com/Entropy-Foundation/supra-l1-sdk
+- TypeScript SDK: https://github.com/Entropy-Foundation/supra-ts-sdk
 - SDK Docs: https://sdk-docs.supra.com
 - Dev Hub: https://github.com/supra-labs/supra-dev-hub
 
@@ -1094,10 +1111,12 @@ See `references/patterns.md` for full upgrade code examples.
 | `references/resource_accounts.md` | SignerCapability, vault, DAO patterns |
 | `references/patterns.md` | SmartTable, upgrade, multi-signer, gas |
 | `references/object_model.md` | Supra object model |
+| `references/supra_ide_deploy.md` | Deploy from the browser IDE (ide.supra.com) to Testnet and Mainnet - no Docker |
+| `references/starkey_integration.md` | StarKey provider summary; points to the wallet-connect skill for full integration |
 | `scripts/example_contract.move` | Counter - basic module template |
 | `scripts/token_contract.move` | Custom coin (mint/burn/transfer) |
 | `scripts/events_example.move` | Events + vector registry pattern |
-| `scripts/advanced_examples.move` | Admin, pausable, NFT (Table), timelock |
+| `scripts/advanced_examples.move` | Admin, pausable, Digital Asset NFT, timelock |
 | `scripts/test_examples.move` | Full unit test suite patterns |
 | `scripts/deploy.sh` | Compile + publish automation |
 | `scripts/version_check.sh` | CLI version check |

@@ -1,0 +1,22 @@
+{
+  "name": "supra-dev-skills",
+  "description": "Supra blockchain development toolkit for Claude Code: Move smart contracts, Starkey wallet integration, and the Supra L1 TypeScript SDK.",
+  "version": "4.0.0",
+  "author": {
+    "name": "Supra / Entropy Foundation",
+    "email": "b.jain@supra.com"
+  },
+  "homepage": "https://github.com/Entropy-Foundation/supra-dev-skills",
+  "repository": "https://github.com/Entropy-Foundation/supra-dev-skills",
+  "license": "MIT",
+  "keywords": [
+    "supra",
+    "move",
+    "blockchain",
+    "starkey",
+    "typescript-sdk",
+    "dvrf",
+    "oracles",
+    "automation"
+  ]
+}
